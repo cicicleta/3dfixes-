@@ -1,0 +1,331 @@
+//Lighting PS 1.
+// ---- Created with 3Dmigoto v0.6.163 on Wed May 15 23:47:12 2024
+
+cbuffer _Globals : register(b0)
+{
+  int nClstPtch[2] : packoffset(c0);
+  float4 vClstZPrm : packoffset(c2);
+  float4 g_parameter0 : packoffset(c3);
+  float4 g_parameter1 : packoffset(c4);
+  float4 g_parameter2 : packoffset(c5);
+  float4 g_parameter3 : packoffset(c6);
+  float4 g_parameter4 : packoffset(c7);
+  float4 g_parameter5 : packoffset(c8);
+}
+
+Texture2D<float4> sNormalMap : register(t0);
+Texture2D<float4> sMaterialMap : register(t1);
+Texture2D<float4> sDepth : register(t2);
+Buffer<uint> tCllLightIndices : register(t16);
+Buffer<float4> tCllLightPositions : register(t17);
+Buffer<float3> tCllLightAttributes : register(t18);
+
+
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+
+void main(
+  float4 v0 : SV_Position0,
+  out float4 o0 : SV_Target0,
+  out float4 o1 : SV_Target1)
+{
+  float4 r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r11,r18,r20,r21,r23;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+  
+  float4 stereo = StereoParams.Load(0);
+  
+  r0.xy = (int2)v0.xy;
+  r0.zw = float2(0,0);
+  r1.x = sDepth.Load(r0.xyw).x;
+  r1.y = r1.x * vClstZPrm.x + vClstZPrm.y;
+  r1.y = log2(r1.y);
+  r1.y = r1.y * vClstZPrm.z + vClstZPrm.w;
+  r1.y = max(0, r1.y);
+  r1.y = (uint)r1.y;
+  r1.z = cmp((uint)r1.y < 16);
+  if (r1.z != 0) {
+    r1.zw = float2(0.015625,0.015625) * v0.xy;
+    r1.zw = (uint2)r1.zw;
+    r1.w = nClstPtch[0] * (int)r1.w;
+    r1.y = mad(nClstPtch[1], (int)r1.y, (int)r1.w);
+    r1.y = (int)r1.y + (int)r1.z;
+    r1.z = 514 * (int)r1.y;
+    r1.z = tCllLightIndices.Load(r1.z).x;
+    if (r1.z != 0) {
+      r2.xyz = sNormalMap.Load(r0.xyw).xyz;
+      r2.xyz = r2.xyz * float3(2,2,2) + float3(-1,-1,-1);
+      r1.w = dot(r2.xyz, r2.xyz);
+      r1.w = rsqrt(r1.w);
+      r2.xyz = r2.xyz * r1.www;
+      r0.x = sMaterialMap.Load(r0.xyz).x;
+      r0.y = g_parameter4.z + g_parameter4.w;
+      r0.z = g_parameter4.w * r0.y;
+      r0.y = r1.x * g_parameter4.z + -r0.y;
+      r3.z = r0.z / r0.y;
+      r0.yz = float2(0.5,0.5) * g_parameter5.xy;
+      r1.xw = trunc(v0.xy);
+      r0.w = -g_parameter5.x * 0.5 + r1.x;
+      r4.x = r0.w / r0.y;
+      r0.y = g_parameter5.y * 0.5 + -r1.w;
+      r4.y = r0.y / r0.z;
+	  
+	  r4.x-=stereo.x;
+	  
+	  r20.yz = g_parameter4.xy * r4.xy;
+      r23.xy = r20.yz * -r3.zz;
+	  r23.z = r3.z;
+	  
+	  r4.x-=stereo.x*stereo.y/r3.z;
+	  
+      r0.yz = g_parameter4.xy * r4.xy;
+      r3.xy = r0.yz * -r3.zz;
+	  r0.y = mad(514, (int)r1.y, 2);
+      r0.x = r0.x * 56 + 8;
+      r0.z = dot(r23.xyz, r23.xyz);
+      r0.z = rsqrt(r0.z);
+      r1.xyw = r23.xyz * r0.zzz;
+      r0.z = dot(r1.xyw, r2.xyz);
+      r0.z = r0.z + r0.z;
+      r1.xyw = r2.xyz * -r0.zzz + r1.xyw;
+      r4.w = 1;
+      r5.w = 1;
+      r6.xyzw = float4(0,0,0,0);
+      r7.xyzw = float4(0,0,0,0);
+      r0.z = 0;
+      while (true) {
+        r0.w = cmp((uint)r0.z >= (uint)r1.z);
+        if (r0.w != 0) break;
+        r0.w = (int)r0.y + (int)r0.z;
+        r0.w = tCllLightIndices.Load(r0.w).x;
+        r8.xyz = tCllLightPositions.Load(r0.w).xyz;
+        r2.w = (uint)r0.w << 1;
+        r9.xyz = tCllLightAttributes.Load(r2.w).xyz;
+        bitmask.w = ((~(-1 << 31)) << 1) & 0xffffffff;  r0.w = (((uint)r0.w << 1) & bitmask.w) | ((uint)1 & ~bitmask.w);
+        r10.xy = tCllLightAttributes.Load(r0.w).xy;
+        r9.xyz = r9.xyz + r9.xyz;
+		
+		//r21.xyz = g_parameter1.xyz * r8.yyy;
+        //r18.xyw = r8.xxx * g_parameter0.xyz + r21.xyz;
+        //r18.xyz = r8.zzz * g_parameter2.xyz + r18.xyw;
+        //r18.xyz = g_parameter3.xyz + r18.xyz;
+		
+		//r8.x+=stereo.x*(stereo.y*r18.z-1);
+		
+        r11.xyz = g_parameter1.xyz * r8.yyy;
+        r8.xyw = r8.xxx * g_parameter0.xyz + r11.xyz;
+        r8.xyz = r8.zzz * g_parameter2.xyz + r8.xyw;
+        r8.xyz = g_parameter3.xyz + r8.xyz;
+        r8.xyz = r8.xyz + -r3.xyz;
+        r0.w = dot(r8.xyz, r8.xyz);
+        r2.w = rsqrt(r0.w);
+        r8.xyz = r8.xyz * r2.www;
+        r0.w = r0.w + -r10.x;
+        r0.w = saturate(-r0.w * r10.y + 1);
+        r2.w = dot(r8.xyz, r2.xyz);
+        r2.w = max(0, r2.w);
+        r3.w = r2.w * r0.w;
+        r8.w = cmp(0 < r3.w);
+        r10.xyz = r9.xyz * r3.www;
+        r4.xyz = max(r10.xyz, r7.xyz);
+        r2.w = -r0.w * r2.w + 1;
+        r3.w = saturate(dot(r1.xyw, r8.xyz));
+        r3.w = log2(r3.w);
+        r3.w = r3.w * r0.x;
+        r3.w = exp2(r3.w);
+        r2.w = r2.w * r2.w;
+        r2.w = saturate(r2.w * -3 + 3);
+        r2.w = r3.w * r2.w;
+        r0.w = r2.w * r0.w;
+        r8.xyz = r9.xyz * r0.www;
+        r5.xyz = max(r8.xyz, r6.xyz);
+        r6.xyzw = r8.wwww ? r5.xyzw : r6.xyzw;
+        r7.xyzw = r8.wwww ? r4.xyzw : r7.xyzw;
+        r0.z = (int)r0.z + 1;
+      }
+      o1.xyzw = r6.xyzw;
+      o0.xyzw = r7.xyzw;
+    } else {
+      o1.xyzw = float4(0,0,0,0);
+      o0.xyzw = float4(0,0,0,0);
+    }
+  } else {
+    o1.xyzw = float4(0,0,0,0);
+    o0.xyzw = float4(0,0,0,0);
+  }
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) HLSL Shader Compiler 9.29.952.3111
+//
+//   using 3Dmigoto v0.6.163 on Wed May 15 23:47:12 2024
+//
+//
+// Buffer Definitions:
+//
+// cbuffer $Globals
+// {
+//
+//   int nClstPtch[2];                  // Offset:    0 Size:    20
+//   float4 vClstZPrm;                  // Offset:   32 Size:    16
+//   float4 g_parameter0;               // Offset:   48 Size:    16
+//   float4 g_parameter1;               // Offset:   64 Size:    16
+//   float4 g_parameter2;               // Offset:   80 Size:    16
+//   float4 g_parameter3;               // Offset:   96 Size:    16
+//   float4 g_parameter4;               // Offset:  112 Size:    16
+//   float4 g_parameter5;               // Offset:  128 Size:    16
+//
+// }
+//
+//
+// Resource Bindings:
+//
+// Name                                 Type  Format         Dim Slot Elements
+// ------------------------------ ---------- ------- ----------- ---- --------
+// sNormalMap                        texture  float4          2d    0        1
+// sMaterialMap                      texture  float4          2d    1        1
+// sDepth                            texture  float4          2d    2        1
+// tCllLightIndices                  texture    uint         buf   16        1
+// tCllLightPositions                texture  float4         buf   17        1
+// tCllLightAttributes               texture  float3         buf   18        1
+// $Globals                          cbuffer      NA          NA    0        1
+//
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Position              0   xyzw        0      POS   float   xy
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Target                0   xyzw        0   TARGET   float   xyzw
+// SV_Target                1   xyzw        1   TARGET   float   xyzw
+//
+ps_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer CB0[9], immediateIndexed
+dcl_resource_texture2d (float,float,float,float) t0
+dcl_resource_texture2d (float,float,float,float) t1
+dcl_resource_texture2d (float,float,float,float) t2
+dcl_resource_buffer (uint,uint,uint,uint) t16
+dcl_resource_buffer (float,float,float,float) t17
+dcl_resource_buffer (float,float,float,float) t18
+dcl_input_ps_siv linear noperspective v0.xy, position
+dcl_output o0.xyzw
+dcl_output o1.xyzw
+dcl_temps 12
+ftoi r0.xy, v0.xyxx
+mov r0.zw, l(0,0,0,0)
+ld_indexable(texture2d)(float,float,float,float) r1.x, r0.xyww, t2.xyzw
+mad r1.y, r1.x, cb0[2].x, cb0[2].y
+log r1.y, r1.y
+mad r1.y, r1.y, cb0[2].z, cb0[2].w
+max r1.y, r1.y, l(0.000000)
+ftou r1.y, r1.y
+ult r1.z, r1.y, l(16)
+if_nz r1.z
+  mul r1.zw, v0.xxxy, l(0.000000, 0.000000, 0.015625, 0.015625)
+  ftou r1.zw, r1.zzzw
+  imul null, r1.w, cb0[0].x, r1.w
+  imad r1.y, cb0[1].x, r1.y, r1.w
+  iadd r1.y, r1.y, r1.z
+  imul null, r1.z, l(514), r1.y
+  ld_indexable(buffer)(uint,uint,uint,uint) r1.z, r1.zzzz, t16.yzxw
+  if_nz r1.z
+    ld_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyww, t0.xyzw
+    mad r2.xyz, r2.xyzx, l(2.000000, 2.000000, 2.000000, 0.000000), l(-1.000000, -1.000000, -1.000000, 0.000000)
+    dp3 r1.w, r2.xyzx, r2.xyzx
+    rsq r1.w, r1.w
+    mul r2.xyz, r1.wwww, r2.xyzx
+    ld_indexable(texture2d)(float,float,float,float) r0.x, r0.xyzw, t1.xyzw
+    add r0.y, cb0[7].w, cb0[7].z
+    mul r0.z, r0.y, cb0[7].w
+    mad r0.y, r1.x, cb0[7].z, -r0.y
+    div r3.z, r0.z, r0.y
+    mul r0.yz, cb0[8].xxyx, l(0.000000, 0.500000, 0.500000, 0.000000)
+    round_z r1.xw, v0.xxxy
+    mad r0.w, -cb0[8].x, l(0.500000), r1.x
+    div r4.x, r0.w, r0.y
+    mad r0.y, cb0[8].y, l(0.500000), -r1.w
+    div r4.y, r0.y, r0.z
+    mul r0.yz, r4.xxyx, cb0[7].xxyx
+    mul r3.xy, -r3.zzzz, r0.yzyy
+    imad r0.y, l(514), r1.y, l(2)
+    mad r0.x, r0.x, l(56.000000), l(8.000000)
+    dp3 r0.z, r3.xyzx, r3.xyzx
+    rsq r0.z, r0.z
+    mul r1.xyw, r0.zzzz, r3.xyxz
+    dp3 r0.z, r1.xywx, r2.xyzx
+    add r0.z, r0.z, r0.z
+    mad r1.xyw, r2.xyxz, -r0.zzzz, r1.xyxw
+    mov r4.w, l(1.000000)
+    mov r5.w, l(1.000000)
+    mov r6.xyzw, l(0,0,0,0)
+    mov r7.xyzw, l(0,0,0,0)
+    mov r0.z, l(0)
+    loop
+      uge r0.w, r0.z, r1.z
+      breakc_nz r0.w
+      iadd r0.w, r0.y, r0.z
+      ld_indexable(buffer)(uint,uint,uint,uint) r0.w, r0.wwww, t16.yzwx
+      ld_indexable(buffer)(float,float,float,float) r8.xyz, r0.wwww, t17.xyzw
+      ishl r2.w, r0.w, l(1)
+      ld_indexable(buffer)(float,float,float,float) r9.xyz, r2.wwww, t18.xyzw
+      bfi r0.w, l(31), l(1), r0.w, l(1)
+      ld_indexable(buffer)(float,float,float,float) r10.xy, r0.wwww, t18.xyzw
+      add r9.xyz, r9.xyzx, r9.xyzx
+      mul r11.xyz, r8.yyyy, cb0[4].xyzx
+      mad r8.xyw, r8.xxxx, cb0[3].xyxz, r11.xyxz
+      mad r8.xyz, r8.zzzz, cb0[5].xyzx, r8.xywx
+      add r8.xyz, r8.xyzx, cb0[6].xyzx
+      add r8.xyz, -r3.xyzx, r8.xyzx
+      dp3 r0.w, r8.xyzx, r8.xyzx
+      rsq r2.w, r0.w
+      mul r8.xyz, r2.wwww, r8.xyzx
+      add r0.w, -r10.x, r0.w
+      mad_sat r0.w, -r0.w, r10.y, l(1.000000)
+      dp3 r2.w, r8.xyzx, r2.xyzx
+      max r2.w, r2.w, l(0.000000)
+      mul r3.w, r0.w, r2.w
+      lt r8.w, l(0.000000), r3.w
+      mul r10.xyz, r3.wwww, r9.xyzx
+      max r4.xyz, r7.xyzx, r10.xyzx
+      mad r2.w, -r0.w, r2.w, l(1.000000)
+      dp3_sat r3.w, r1.xywx, r8.xyzx
+      log r3.w, r3.w
+      mul r3.w, r0.x, r3.w
+      exp r3.w, r3.w
+      mul r2.w, r2.w, r2.w
+      mad_sat r2.w, r2.w, l(-3.000000), l(3.000000)
+      mul r2.w, r2.w, r3.w
+      mul r0.w, r0.w, r2.w
+      mul r8.xyz, r0.wwww, r9.xyzx
+      max r5.xyz, r6.xyzx, r8.xyzx
+      movc r6.xyzw, r8.wwww, r5.xyzw, r6.xyzw
+      movc r7.xyzw, r8.wwww, r4.xyzw, r7.xyzw
+      iadd r0.z, r0.z, l(1)
+    endloop
+    mov o1.xyzw, r6.xyzw
+    mov o0.xyzw, r7.xyzw
+  else
+    mov o1.xyzw, l(0,0,0,0)
+    mov o0.xyzw, l(0,0,0,0)
+  endif
+else
+  mov o1.xyzw, l(0,0,0,0)
+  mov o0.xyzw, l(0,0,0,0)
+endif
+ret
+// Approximately 102 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

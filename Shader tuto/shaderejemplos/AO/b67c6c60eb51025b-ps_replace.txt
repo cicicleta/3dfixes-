@@ -1,0 +1,332 @@
+//Ambient occlusion (SSAO) fix;
+// ---- Created with 3Dmigoto v1.3.16 on Sat Apr 06 22:17:57 2019
+
+cbuffer _Globals : register(b0)
+{
+  row_major float4x4 InvView : packoffset(c0);
+  row_major float4x4 InvProj : packoffset(c4);
+  row_major float4x4 InvViewProj : packoffset(c8);
+  row_major float4x4 gProjectionMatrix2D : packoffset(c12);
+  float4 gSSAOParam : packoffset(c16);
+  float4 gSSAOParam2 : packoffset(c17);
+  float4 gSSAOParam3 : packoffset(c18);
+  float4 gSSAOParam4 : packoffset(c19);
+  float4 gSSAOParam5 : packoffset(c20);
+}
+
+SamplerState gNoFilterSamplerState_s : register(s0);
+Texture2D<float4> gNormalMapSampler : register(t0);
+Texture2D<float4> gDepthMapSampler : register(t1);
+
+
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+
+void main(
+  float4 v0 : SV_Position0,
+  float2 v1 : TEXCOORD0,
+  out float4 o0 : SV_Target0)
+{
+  float4 r0,r1,r2,r3,r4,r5,r6,r7;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+
+  float4 stereo = StereoParams.Load(0);
+  
+  r0.xy = gSSAOParam.xy * v1.xy;
+  r0.xy = ceil(r0.xy);
+  r0.xy = float2(-0.5,-0.5) + r0.xy;
+  r0.xy = gSSAOParam.zw * r0.xy;
+  r1.z = gDepthMapSampler.SampleLevel(gNoFilterSamplerState_s, r0.xy, 0).x;
+  r0.z = cmp(r1.z >= gSSAOParam4.x);
+  if (r0.z != 0) {
+    o0.xyzw = float4(1,1,1,1);
+    return;
+  }
+  r1.xy = r0.xy * float2(2,-2) + float2(-1,1);
+  r1.w = 1;
+  
+  float depth = dot(InvProj._m30_m31_m32_m33, r1.xyzw);
+  r1.x+=stereo.x*(depth*stereo.y-1);
+  
+  r2.x = dot(InvProj._m00_m01_m02_m03, r1.xyzw);
+  r2.y = dot(InvProj._m10_m11_m12_m13, r1.xyzw);
+  r2.z = dot(InvProj._m20_m21_m22_m23, r1.xyzw);
+  r2.w = dot(InvProj._m30_m31_m32_m33, r1.xyzw);
+  r0.z = r2.z / r2.w;
+  r1.xyzw = r2.xyzw / r2.wwww;
+  r2.x = dot(InvView._m00_m01_m02_m03, r1.xyzw);
+  r2.y = dot(InvView._m10_m11_m12_m13, r1.xyzw);
+  r2.z = dot(InvView._m20_m21_m22_m23, r1.xyzw);
+  r1.xyz = gNormalMapSampler.SampleLevel(gNoFilterSamplerState_s, r0.xy, 0).xyz;
+  r1.xyz = r1.xyz * float3(2,2,2) + float3(-1,-1,-1);
+  r0.w = dot(r1.xyz, r1.xyz);
+  r0.w = rsqrt(r0.w);
+  r1.xyz = r1.xyz * r0.www;
+  r3.x = dot(InvView._m00_m01_m02, r1.xyz);
+  r3.y = dot(InvView._m10_m11_m12, r1.xyz);
+  r3.z = dot(InvView._m20_m21_m22, r1.xyz);
+  r0.z = 1 / abs(r0.z);
+  r0.w = 0.5 * gSSAOParam2.x;
+  sincos(r0.w, r1.x, r4.x);
+  r0.w = r1.x / r4.x;
+  r0.z = r0.z / r0.w;
+  r0.z = gSSAOParam2.y * r0.z;
+  r0.z = min(gSSAOParam2.z, r0.z);
+  r0.w = cmp(2 < r0.z);
+  r1.x = r0.w ? gSSAOParam2.w : 3;
+  r1.y = (int)r1.x;
+  r0.w = r0.w ? gSSAOParam3.x : 1;
+  r1.z = (int)r0.w;
+  r1.x = trunc(r1.x);
+  r1.x = 6.28318548 / r1.x;
+  r0.w = trunc(r0.w);
+  r0.z = r0.z / r0.w;
+  r0.z = max(1, r0.z);
+  r0.zw = gSSAOParam.zw * r0.zz;
+  r4.w = 1;
+  r1.w = 0;
+  r2.w = 0;
+  while (true) {
+    r3.w = cmp((int)r2.w >= 16);
+    if (r3.w != 0) break;
+    r3.w = cmp((int)r2.w >= (int)r1.y);
+    if (r3.w != 0) {
+      break;
+    }
+    r3.w = (int)r2.w;
+    r3.w = r3.w * r1.x;
+    sincos(r3.w, r5.x, r6.x);
+    r6.x = r6.x * r0.z;
+    r6.y = r5.x * r0.w;
+    r3.w = r1.w;
+    r5.x = 1;
+    while (true) {
+      r5.y = cmp(16 < (int)r5.x);
+      if (r5.y != 0) break;
+      r5.y = cmp((int)r1.z < (int)r5.x);
+      if (r5.y != 0) {
+        break;
+      }
+      r5.y = (int)r5.x;
+      r5.yz = r6.xy * r5.yy + r0.xy;
+      r5.yz = gSSAOParam.xy * r5.yz;
+      r5.yz = ceil(r5.yz);
+      r5.yz = float2(-0.5,-0.5) + r5.yz;
+      r5.yz = gSSAOParam.zw * r5.yz;
+      r4.z = gDepthMapSampler.SampleLevel(gNoFilterSamplerState_s, r5.yz, 0).x;
+      r4.xy = r5.yz * float2(2,-2) + float2(-1,1);
+	  
+	  depth = dot(InvProj._m30_m31_m32_m33, r4.xyzw);
+      r4.x+=stereo.x*(depth*stereo.y-1);
+	  
+      r7.x = dot(InvProj._m00_m01_m02_m03, r4.xyzw);
+      r7.y = dot(InvProj._m10_m11_m12_m13, r4.xyzw);
+      r7.z = dot(InvProj._m20_m21_m22_m23, r4.xyzw);
+      r7.w = dot(InvProj._m30_m31_m32_m33, r4.xyzw);
+      r7.xyzw = r7.xyzw / r7.wwww;
+      r4.x = dot(InvView._m00_m01_m02_m03, r7.xyzw);
+      r4.y = dot(InvView._m10_m11_m12_m13, r7.xyzw);
+      r4.z = dot(InvView._m20_m21_m22_m23, r7.xyzw);
+      r4.xyz = r4.xyz + -r2.xyz;
+      r5.y = dot(r4.xyz, r4.xyz);
+      r5.y = sqrt(r5.y);
+      r5.z = cmp(r5.y < gSSAOParam3.w);
+      r4.xyz = r4.xyz / r5.yyy;
+      r4.x = dot(r3.xyz, r4.xyz);
+      r4.y = cmp(gSSAOParam3.y < r4.x);
+      r4.z = max(1, r5.y);
+      r4.x = r4.x / r4.z;
+      r4.x = r4.x + r3.w;
+      r4.x = r4.y ? r4.x : r3.w;
+      r3.w = r5.z ? r4.x : r3.w;
+      r5.x = (int)r5.x + 1;
+    }
+    r1.w = r3.w;
+    r2.w = (int)r2.w + 1;
+  }
+  r0.x = (int)r1.y * (int)r1.z;
+  r0.x = (int)r0.x;
+  r0.x = r1.w / r0.x;
+  r0.x = gSSAOParam3.z * r0.x;
+  r0.x = min(1, r0.x);
+  o0.xyzw = float4(1,1,1,1) + -r0.xxxx;
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) HLSL Shader Compiler 9.29.952.3111
+//
+//   using 3Dmigoto v1.3.16 on Sat Apr 06 22:17:57 2019
+//
+//
+// Buffer Definitions:
+//
+// cbuffer $Globals
+// {
+//
+//   row_major float4x4 InvView;        // Offset:    0 Size:    64
+//   row_major float4x4 InvProj;        // Offset:   64 Size:    64
+//   row_major float4x4 InvViewProj;    // Offset:  128 Size:    64 [unused]
+//   row_major float4x4 gProjectionMatrix2D;// Offset:  192 Size:    64 [unused]
+//   float4 gSSAOParam;                 // Offset:  256 Size:    16
+//   float4 gSSAOParam2;                // Offset:  272 Size:    16
+//   float4 gSSAOParam3;                // Offset:  288 Size:    16
+//   float4 gSSAOParam4;                // Offset:  304 Size:    16
+//   float4 gSSAOParam5;                // Offset:  320 Size:    16 [unused]
+//
+// }
+//
+//
+// Resource Bindings:
+//
+// Name                                 Type  Format         Dim Slot Elements
+// ------------------------------ ---------- ------- ----------- ---- --------
+// gNoFilterSamplerState             sampler      NA          NA    0        1
+// gNormalMapSampler                 texture  float4          2d    0        1
+// gDepthMapSampler                  texture  float4          2d    1        1
+// $Globals                          cbuffer      NA          NA    0        1
+//
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Position              0   xyzw        0      POS   float
+// TEXCOORD                 0   xy          1     NONE   float   xy
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Target                0   xyzw        0   TARGET   float   xyzw
+//
+ps_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer cb0[20], immediateIndexed
+dcl_sampler s0, mode_default
+dcl_resource_texture2d (float,float,float,float) t0
+dcl_resource_texture2d (float,float,float,float) t1
+dcl_input_ps linear v1.xy
+dcl_output o0.xyzw
+dcl_temps 8
+mul r0.xy, v1.xyxx, cb0[16].xyxx
+round_pi r0.xy, r0.xyxx
+add r0.xy, r0.xyxx, l(-0.500000, -0.500000, 0.000000, 0.000000)
+mul r0.xy, r0.xyxx, cb0[16].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t1.yzxw, s0, l(0.000000)
+ge r0.z, r1.z, cb0[19].x
+if_nz r0.z
+  mov o0.xyzw, l(1.000000,1.000000,1.000000,1.000000)
+  ret
+endif
+mad r1.xy, r0.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000), l(-1.000000, 1.000000, 0.000000, 0.000000)
+mov r1.w, l(1.000000)
+dp4 r2.x, cb0[4].xyzw, r1.xyzw
+dp4 r2.y, cb0[5].xyzw, r1.xyzw
+dp4 r2.z, cb0[6].xyzw, r1.xyzw
+dp4 r2.w, cb0[7].xyzw, r1.xyzw
+div r0.z, r2.z, r2.w
+div r1.xyzw, r2.xyzw, r2.wwww
+dp4 r2.x, cb0[0].xyzw, r1.xyzw
+dp4 r2.y, cb0[1].xyzw, r1.xyzw
+dp4 r2.z, cb0[2].xyzw, r1.xyzw
+sample_l_indexable(texture2d)(float,float,float,float) r1.xyz, r0.xyxx, t0.xyzw, s0, l(0.000000)
+mad r1.xyz, r1.xyzx, l(2.000000, 2.000000, 2.000000, 0.000000), l(-1.000000, -1.000000, -1.000000, 0.000000)
+dp3 r0.w, r1.xyzx, r1.xyzx
+rsq r0.w, r0.w
+mul r1.xyz, r0.wwww, r1.xyzx
+dp3 r3.x, cb0[0].xyzx, r1.xyzx
+dp3 r3.y, cb0[1].xyzx, r1.xyzx
+dp3 r3.z, cb0[2].xyzx, r1.xyzx
+div r0.z, l(1.000000, 1.000000, 1.000000, 1.000000), |r0.z|
+mul r0.w, cb0[17].x, l(0.500000)
+sincos r1.x, r4.x, r0.w
+div r0.w, r1.x, r4.x
+div r0.z, r0.z, r0.w
+mul r0.z, r0.z, cb0[17].y
+min r0.z, r0.z, cb0[17].z
+lt r0.w, l(2.000000), r0.z
+movc r1.x, r0.w, cb0[17].w, l(3.000000)
+ftoi r1.y, r1.x
+movc r0.w, r0.w, cb0[18].x, l(1.000000)
+ftoi r1.z, r0.w
+round_z r1.x, r1.x
+div r1.x, l(6.28318548), r1.x
+round_z r0.w, r0.w
+div r0.z, r0.z, r0.w
+max r0.z, r0.z, l(1.000000)
+mul r0.zw, r0.zzzz, cb0[16].zzzw
+mov r4.w, l(1.000000)
+mov r1.w, l(0)
+mov r2.w, l(0)
+loop
+  ige r3.w, r2.w, l(16)
+  breakc_nz r3.w
+  ige r3.w, r2.w, r1.y
+  if_nz r3.w
+    break
+  endif
+  itof r3.w, r2.w
+  mul r3.w, r1.x, r3.w
+  sincos r5.x, r6.x, r3.w
+  mul r6.x, r0.z, r6.x
+  mul r6.y, r0.w, r5.x
+  mov r3.w, r1.w
+  mov r5.x, l(1)
+  loop
+    ilt r5.y, l(16), r5.x
+    breakc_nz r5.y
+    ilt r5.y, r1.z, r5.x
+    if_nz r5.y
+      break
+    endif
+    itof r5.y, r5.x
+    mad r5.yz, r6.xxyx, r5.yyyy, r0.xxyx
+    mul r5.yz, r5.yyzy, cb0[16].xxyx
+    round_pi r5.yz, r5.yyzy
+    add r5.yz, r5.yyzy, l(0.000000, -0.500000, -0.500000, 0.000000)
+    mul r5.yz, r5.yyzy, cb0[16].zzwz
+    sample_l_indexable(texture2d)(float,float,float,float) r4.z, r5.yzyy, t1.yzxw, s0, l(0.000000)
+    mad r4.xy, r5.yzyy, l(2.000000, -2.000000, 0.000000, 0.000000), l(-1.000000, 1.000000, 0.000000, 0.000000)
+    dp4 r7.x, cb0[4].xyzw, r4.xyzw
+    dp4 r7.y, cb0[5].xyzw, r4.xyzw
+    dp4 r7.z, cb0[6].xyzw, r4.xyzw
+    dp4 r7.w, cb0[7].xyzw, r4.xyzw
+    div r7.xyzw, r7.xyzw, r7.wwww
+    dp4 r4.x, cb0[0].xyzw, r7.xyzw
+    dp4 r4.y, cb0[1].xyzw, r7.xyzw
+    dp4 r4.z, cb0[2].xyzw, r7.xyzw
+    add r4.xyz, -r2.xyzx, r4.xyzx
+    dp3 r5.y, r4.xyzx, r4.xyzx
+    sqrt r5.y, r5.y
+    lt r5.z, r5.y, cb0[18].w
+    div r4.xyz, r4.xyzx, r5.yyyy
+    dp3 r4.x, r3.xyzx, r4.xyzx
+    lt r4.y, cb0[18].y, r4.x
+    max r4.z, r5.y, l(1.000000)
+    div r4.x, r4.x, r4.z
+    add r4.x, r3.w, r4.x
+    movc r4.x, r4.y, r4.x, r3.w
+    movc r3.w, r5.z, r4.x, r3.w
+    iadd r5.x, r5.x, l(1)
+  endloop
+  mov r1.w, r3.w
+  iadd r2.w, r2.w, l(1)
+endloop
+imul null, r0.x, r1.y, r1.z
+itof r0.x, r0.x
+div r0.x, r1.w, r0.x
+mul r0.x, r0.x, cb0[18].z
+min r0.x, r0.x, l(1.000000)
+add o0.xyzw, -r0.xxxx, l(1.000000, 1.000000, 1.000000, 1.000000)
+ret
+// Approximately 111 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

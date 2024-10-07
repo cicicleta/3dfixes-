@@ -1,0 +1,537 @@
+//Ambient occlusion PS 2.
+// ---- Created with geo-11 v0.6.193 on Sun Jun  2 18:51:56 2024
+
+cbuffer CBPerViewGlobal : register(b13)
+{
+  row_major float4x4 CV_ViewProjZeroMatr : packoffset(c0);
+  float4 CV_AnimGenParams : packoffset(c4);
+  row_major float4x4 CV_ViewProjMatr : packoffset(c5);
+  row_major float4x4 CV_ViewProjNearestMatr : packoffset(c9);
+  row_major float4x4 CV_InvViewProj : packoffset(c13);
+  row_major float4x4 CV_PrevViewProjMatr : packoffset(c17);
+  row_major float4x4 CV_PrevViewProjNearestMatr : packoffset(c21);
+  row_major float3x4 CV_ScreenToWorldBasis : packoffset(c25);
+  float4 CV_TessInfo : packoffset(c28);
+  float4 CV_CameraRightVector : packoffset(c29);
+  float4 CV_CameraFrontVector : packoffset(c30);
+  float4 CV_CameraUpVector : packoffset(c31);
+  float4 CV_ScreenSize : packoffset(c32);
+  float4 CV_HPosScale : packoffset(c33);
+  float4 CV_HPosClamp : packoffset(c34);
+  float4 CV_ProjRatio : packoffset(c35);
+  float4 CV_NearestScaled : packoffset(c36);
+  float4 CV_NearFarClipDist : packoffset(c37);
+  float4 CV_SunLightDir : packoffset(c38);
+  float4 CV_SunColor : packoffset(c39);
+  float4 CV_SkyColor : packoffset(c40);
+  float4 CV_FogColor : packoffset(c41);
+  float4 CV_TerrainInfo : packoffset(c42);
+  float4 CV_DecalZFightingRemedy : packoffset(c43);
+  row_major float4x4 CV_FrustumPlaneEquation : packoffset(c44);
+  float4 CV_WindGridOffset : packoffset(c48);
+  row_major float4x4 CV_ViewMatr : packoffset(c49);
+  row_major float4x4 CV_InvViewMatr : packoffset(c53);
+  float CV_LookingGlass_SunSelector : packoffset(c57);
+  float CV_LookingGlass_DepthScalar : packoffset(c57.y);
+  float CV_PADDING0 : packoffset(c57.z);
+  float CV_PADDING1 : packoffset(c57.w);
+}
+
+cbuffer CBSSDO : register(b0)
+{
+
+  struct
+  {
+    float4 viewSpaceParams;
+    float4 ssdoParams;
+  } cbSSDO : packoffset(c0);
+
+}
+
+SamplerState ssSSDODepth_s : register(s0);
+Texture2D<float4> _tex0_D3D11 : register(t0);
+Texture2D<float4> _tex1_D3D11 : register(t1);
+Texture2D<float4> _tex2_D3D11 : register(t2);
+
+
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+
+void main(
+  float4 v0 : SV_Position0,
+  float4 v1 : TEXCOORD0,
+  out float4 o0 : SV_Target0)
+{
+  float4 r0,r1,r2,r3,r4,r5,r6,r7,r8,r9,r10,r21;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+  
+  float4 stereo = StereoParams.Load(0);
+  float fov = CV_ViewProjMatr._m00*CV_ViewProjMatr._m00+CV_ViewProjMatr._m01*CV_ViewProjMatr._m01+CV_ViewProjMatr._m02*CV_ViewProjMatr._m02;
+  
+  r21.xyzw = v1.xyzw;
+  r21.x+=stereo.x*0.5;
+  //v1.x+=stereo.x*1;
+  
+  r0.z = 1;
+  r1.xyz = float3(0.5,0.150000006,0.150000006) * cbSSDO.ssdoParams.wxy;
+  r2.xy = (int2)v0.xy;
+  r3.xy = (int2)r2.xy & int2(1,1);
+  r0.w = r3.x ? r1.x : cbSSDO.ssdoParams.w;
+  r1.x = 0.5 * r0.w;
+  r0.w = r3.y ? r1.x : r0.w;
+  r2.zw = float2(0,0);
+  r1.x = _tex1_D3D11.Load(r2.xyw).x;
+  r2.xyz = _tex0_D3D11.Load(r2.xyz).xyz;
+  
+  //r2.xyz-=stereo.x*1*CV_ViewProjMatr._m00_m01_m02/fov;
+  
+  //r2.x-=stereo.x;
+  
+  r2.xyz = r2.xyz * float3(2,2,2) + float3(-1,-1,-1);
+  
+  //r1.y-=stereo.x;
+  
+  r1.yz = r1.yz / r1.xx;
+  r1.yz = max(cbSSDO.ssdoParams.zz, r1.yz);
+  r1.yz = min(r1.yz, r0.ww);
+  r3.xy = float2(0.25,0.25) * v0.xy;
+  r3.xy = frac(r3.xy);
+  r1.w = dot(r3.xy, float2(1,0.25));
+  r1.w = 6.28310013 * r1.w;
+  sincos(r1.w, r3.x, r4.x);
+  r5.x = -r3.x;
+  r5.y = r4.x;
+  r5.z = r3.x;
+  r3.x = dot(float2(-0.0199999996,-0.140000001), r5.xy);
+  r3.y = dot(float2(-0.0199999996,-0.140000001), r5.yz);
+  r3.xy = r3.xy * r1.yz + v1.xy;
+  r3.zw = CV_HPosScale.xy * r3.xy;
+  r0.xy = r3.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  
+  //r0.x-=stereo.x;
+  
+  r3.x = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r3.zw, 0).w;
+  r4.x = dot(float2(0.239999995,-0.0399999991), r5.xy);
+  r4.y = dot(float2(0.239999995,-0.0399999991), r5.yz);
+  r4.xy = r4.xy * r1.yz + v1.xy;
+  r4.zw = CV_HPosScale.xy * r4.xy;
+  r6.xy = r4.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.y = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r4.zw, 0).w;
+  r4.x = dot(float2(0.0799999982,0.360000014), r5.xy);
+  r4.y = dot(float2(0.0799999982,0.360000014), r5.yz);
+  r4.xy = r4.xy * r1.yz + v1.xy;
+  r4.zw = CV_HPosScale.xy * r4.xy;
+  r7.xy = r4.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.z = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r4.zw, 0).w;
+  r4.x = dot(float2(-0.400000006,0.25999999), r5.xy);
+  r4.y = dot(float2(-0.400000006,0.25999999), r5.yz);
+  r1.zw = r4.xy * r1.yz + v1.xy;
+  r1.y = r1.y * r1.x;
+  r1.y = cbSSDO.viewSpaceParams.x * r1.y;
+  r1.y = CV_NearFarClipDist.y * r1.y;
+  r1.y = r1.y * r1.y;
+  r4.xy = CV_HPosScale.xy * r1.zw;
+  r8.xy = r1.zw * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.w = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r4.xy, 0).w;
+  r3.xyzw = float4(1.00000001e-07,1.00000001e-07,1.00000001e-07,1.00000001e-07) + r3.xyzw;
+  r3.xyzw = CV_NearFarClipDist.yyyy * r3.xyzw;
+  r4.xy = v1.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r4.z = 1;
+  r4.xyz = r4.xyz * r1.xxx;
+  r4.xyz = CV_NearFarClipDist.yyy * r4.xyz;
+  r0.xyz = r0.xyz * r3.xxx + -r4.xyz;
+  r9.x = dot(r0.xyz, r0.xyz);
+  r6.z = 1;
+  r6.xyz = r6.xyz * r3.yyy + -r4.xyz;
+  r9.y = dot(r6.xyz, r6.xyz);
+  r7.z = 1;
+  r3.xyz = r7.xyz * r3.zzz + -r4.xyz;
+  r9.z = dot(r3.xyz, r3.xyz);
+  r8.z = 1;
+  r7.xyz = r8.xyz * r3.www + -r4.xyz;
+  r9.w = dot(r7.xyz, r7.xyz);
+  r8.xyzw = rsqrt(r9.xyzw);
+  r9.xyzw = r1.yyyy * float4(0.3926875,0.3926875,0.3926875,0.3926875) + r9.xyzw;
+  r1.y = 0.3926875 * r1.y;
+  r0.xyz = r8.xxx * r0.xyz;
+  r1.z = dot(r2.xyz, r2.xyz);
+  r1.z = rsqrt(r1.z);
+  r2.xyz = r2.xyz * r1.zzz;
+  
+  //r2.xyz+=stereo.x*-1*CV_ViewProjMatr._m00_m01_m02/fov;
+  
+  r10.x = dot(CV_ViewMatr._m00_m01_m02, r2.xyz);
+  r10.y = dot(CV_ViewMatr._m10_m11_m12, r2.xyz);
+  r10.z = dot(CV_ViewMatr._m20_m21_m22, r2.xyz);
+  r1.z = dot(r10.xyz, r10.xyz);
+  r1.z = rsqrt(r1.z);
+  r2.xyz = r10.xyz * r1.zzz;
+  r2.xyz = float3(1,-1,-1) * r2.xyz;
+  
+  //r2.xyz-=stereo.x*1*CV_ViewProjMatr._m00_m01_m02/fov;
+  
+  r10.x = saturate(dot(r2.xyz, r0.xyz));
+  r6.xyz = r8.yyy * r6.xyz;
+  r10.y = saturate(dot(r2.xyz, r6.xyz));
+  r3.xyz = r8.zzz * r3.xyz;
+  r7.xyz = r8.www * r7.xyz;
+  r10.z = saturate(dot(r2.xyz, r3.xyz));
+  r10.w = saturate(dot(r2.xyz, r7.xyz));
+  r8.xyzw = r10.xyzw * r1.yyyy;
+  r8.xyzw = r8.xyzw / r9.xyzw;
+  r1.yzw = r8.yyy * r6.xyz;
+  r0.xyz = r8.xxx * r0.xyz + r1.yzw;
+  r0.xyz = r8.zzz * r3.xyz + r0.xyz;
+  r0.xyz = r8.www * r7.xyz + r0.xyz;
+  r1.y = dot(r8.xyzw, float4(1,1,1,1));
+  r1.zw = cbSSDO.ssdoParams.xy / r1.xx;
+  r1.zw = max(cbSSDO.ssdoParams.zz, r1.zw);
+  r1.zw = min(r1.zw, r0.ww);
+  r3.x = dot(float2(-0.340000004,-0.439999998), r5.xy);
+  r3.y = dot(float2(-0.340000004,-0.439999998), r5.yz);
+  r3.xy = r3.xy * r1.zw + v1.xy;
+  r3.zw = CV_HPosScale.xy * r3.xy;
+  r6.xy = r3.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.x = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r3.zw, 0).w;
+  r7.x = dot(float2(0.400000006,-0.519999981), r5.xy);
+  r7.y = dot(float2(0.400000006,-0.519999981), r5.yz);
+  r7.xy = r7.xy * r1.zw + v1.xy;
+  r7.zw = CV_HPosScale.xy * r7.xy;
+  r8.xy = r7.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.y = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r7.zw, 0).w;
+  r7.x = dot(float2(0.680000007,0.300000012), r5.xy);
+  r9.x = dot(float2(-0.319999993,0.839999974), r5.xy);
+  r7.y = dot(float2(0.680000007,0.300000012), r5.yz);
+  r9.y = dot(float2(-0.319999993,0.839999974), r5.yz);
+  r5.xy = r9.xy * r1.zw + v1.xy;
+  
+  //r21 instead of v1.
+  r5.zw = r7.xy * r1.zw + r1.xy;
+  
+  r0.w = r1.z * r1.x;
+  r0.w = cbSSDO.viewSpaceParams.x * r0.w;
+  r0.w = CV_NearFarClipDist.y * r0.w;
+  r0.w = r0.w * r0.w;
+  r1.xz = CV_HPosScale.xy * r5.zw;
+  r7.xy = r5.zw * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.z = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r1.xz, 0).w;
+  r1.xz = CV_HPosScale.xy * r5.xy;
+  r5.xy = r5.xy * cbSSDO.viewSpaceParams.xy + cbSSDO.viewSpaceParams.zw;
+  r3.w = _tex2_D3D11.SampleLevel(ssSSDODepth_s, r1.xz, 0).w;
+  r3.xyzw = float4(1.00000001e-07,1.00000001e-07,1.00000001e-07,1.00000001e-07) + r3.xyzw;
+  r3.xyzw = CV_NearFarClipDist.yyyy * r3.xyzw;
+  r6.z = 1;
+  r1.xzw = r6.xyz * r3.xxx + -r4.xyz;
+  r6.x = dot(r1.xzw, r1.xzw);
+  r8.z = 1;
+  r8.xyz = r8.xyz * r3.yyy + -r4.xyz;
+  r6.y = dot(r8.xyz, r8.xyz);
+  r7.z = 1;
+  r3.xyz = r7.xyz * r3.zzz + -r4.xyz;
+  r6.z = dot(r3.xyz, r3.xyz);
+  r5.z = 1;
+  r4.xyz = r5.xyz * r3.www + -r4.xyz;
+  r6.w = dot(r4.xyz, r4.xyz);
+  r5.xyzw = r0.wwww * float4(1.96343756,1.96343756,1.96343756,1.96343756) + r6.xyzw;
+  r6.xyzw = rsqrt(r6.xyzw);
+  r0.w = 1.96343756 * r0.w;
+  r1.xzw = r6.xxx * r1.xzw;
+  r7.x = saturate(dot(r2.xyz, r1.xzw));
+  r8.xyz = r8.xyz * r6.yyy;
+  r7.y = saturate(dot(r2.xyz, r8.xyz));
+  r3.xyz = r6.zzz * r3.xyz;
+  r4.xyz = r6.www * r4.xyz;
+  r7.z = saturate(dot(r2.xyz, r3.xyz));
+  r7.w = saturate(dot(r2.xyz, r4.xyz));
+  r2.xyzw = r7.xyzw * r0.wwww;
+  r2.xyzw = r2.xyzw / r5.xyzw;
+  r5.xyz = r2.yyy * r8.xyz;
+  r1.xzw = r2.xxx * r1.xzw + r5.xyz;
+  r1.xzw = r2.zzz * r3.xyz + r1.xzw;
+  r1.xzw = r2.www * r4.xyz + r1.xzw;
+  r0.w = dot(r2.xyzw, float4(1,1,1,1));
+  r0.w = r1.y + r0.w;
+  o0.w = 0.150000006 * r0.w;
+  r0.xyz = r1.xzw + r0.xyz;
+  r0.xyz = float3(1,-1,-1) * r0.xyz;
+  r1.x = dot(CV_InvViewMatr._m00_m01_m02, r0.xyz);
+  r1.y = dot(CV_InvViewMatr._m10_m11_m12, r0.xyz);
+  r1.z = dot(CV_InvViewMatr._m20_m21_m22, r0.xyz);
+  o0.xyz = r1.xyz * float3(0.075000003,0.075000003,0.075000003) + float3(0.5,0.5,0.5);
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) HLSL Shader Compiler 10.0.10011.16384
+//
+//   using 3Dmigoto v0.6.193 on Sun Jun  2 18:51:56 2024
+//
+//
+// Buffer Definitions:
+//
+// cbuffer CBPerViewGlobal
+// {
+//
+//   row_major float4x4 CV_ViewProjZeroMatr;// Offset:    0 Size:    64 [unused]
+//   float4 CV_AnimGenParams;           // Offset:   64 Size:    16 [unused]
+//   row_major float4x4 CV_ViewProjMatr;// Offset:   80 Size:    64 [unused]
+//   row_major float4x4 CV_ViewProjNearestMatr;// Offset:  144 Size:    64 [unused]
+//   row_major float4x4 CV_InvViewProj; // Offset:  208 Size:    64 [unused]
+//   row_major float4x4 CV_PrevViewProjMatr;// Offset:  272 Size:    64 [unused]
+//   row_major float4x4 CV_PrevViewProjNearestMatr;// Offset:  336 Size:    64 [unused]
+//   row_major float3x4 CV_ScreenToWorldBasis;// Offset:  400 Size:    48 [unused]
+//   float4 CV_TessInfo;                // Offset:  448 Size:    16 [unused]
+//   float4 CV_CameraRightVector;       // Offset:  464 Size:    16 [unused]
+//   float4 CV_CameraFrontVector;       // Offset:  480 Size:    16 [unused]
+//   float4 CV_CameraUpVector;          // Offset:  496 Size:    16 [unused]
+//   float4 CV_ScreenSize;              // Offset:  512 Size:    16 [unused]
+//   float4 CV_HPosScale;               // Offset:  528 Size:    16
+//   float4 CV_HPosClamp;               // Offset:  544 Size:    16 [unused]
+//   float4 CV_ProjRatio;               // Offset:  560 Size:    16 [unused]
+//   float4 CV_NearestScaled;           // Offset:  576 Size:    16 [unused]
+//   float4 CV_NearFarClipDist;         // Offset:  592 Size:    16
+//   float4 CV_SunLightDir;             // Offset:  608 Size:    16 [unused]
+//   float4 CV_SunColor;                // Offset:  624 Size:    16 [unused]
+//   float4 CV_SkyColor;                // Offset:  640 Size:    16 [unused]
+//   float4 CV_FogColor;                // Offset:  656 Size:    16 [unused]
+//   float4 CV_TerrainInfo;             // Offset:  672 Size:    16 [unused]
+//   float4 CV_DecalZFightingRemedy;    // Offset:  688 Size:    16 [unused]
+//   row_major float4x4 CV_FrustumPlaneEquation;// Offset:  704 Size:    64 [unused]
+//   float4 CV_WindGridOffset;          // Offset:  768 Size:    16 [unused]
+//   row_major float4x4 CV_ViewMatr;    // Offset:  784 Size:    64
+//   row_major float4x4 CV_InvViewMatr; // Offset:  848 Size:    64
+//   float CV_LookingGlass_SunSelector; // Offset:  912 Size:     4 [unused]
+//   float CV_LookingGlass_DepthScalar; // Offset:  916 Size:     4 [unused]
+//   float CV_PADDING0;                 // Offset:  920 Size:     4 [unused]
+//   float CV_PADDING1;                 // Offset:  924 Size:     4 [unused]
+//
+// }
+//
+// cbuffer CBSSDO
+// {
+//
+//   struct SSDOConstants
+//   {
+//
+//       float4 viewSpaceParams;        // Offset:    0
+//       float4 ssdoParams;             // Offset:   16
+//
+//   } cbSSDO;                          // Offset:    0 Size:    32
+//
+// }
+//
+//
+// Resource Bindings:
+//
+// Name                                 Type  Format         Dim Slot Elements
+// ------------------------------ ---------- ------- ----------- ---- --------
+// ssSSDODepth                       sampler      NA          NA    0        1
+// _tex0_D3D11                       texture  float4          2d    0        1
+// _tex1_D3D11                       texture  float4          2d    1        1
+// _tex2_D3D11                       texture  float4          2d    2        1
+// CBSSDO                            cbuffer      NA          NA    0        1
+// CBPerViewGlobal                   cbuffer      NA          NA   13        1
+//
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Position              0   xyzw        0      POS   float   xy
+// TEXCOORD                 0   xyzw        1     NONE   float   xy
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Target                0   xyzw        0   TARGET   float   xyzw
+//
+ps_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer CB13[56], immediateIndexed
+dcl_constantbuffer CB0[2], immediateIndexed
+dcl_sampler s0, mode_default
+dcl_resource_texture2d (float,float,float,float) t0
+dcl_resource_texture2d (float,float,float,float) t1
+dcl_resource_texture2d (float,float,float,float) t2
+dcl_input_ps_siv linear noperspective v0.xy, position
+dcl_input_ps linear v1.xy
+dcl_output o0.xyzw
+dcl_temps 11
+mov r0.z, l(1.000000)
+mul r1.xyz, cb0[1].wxyw, l(0.500000, 0.150000, 0.150000, 0.000000)
+ftoi r2.xy, v0.xyxx
+and r3.xy, r2.xyxx, l(1, 1, 0, 0)
+movc r0.w, r3.x, r1.x, cb0[1].w
+mul r1.x, r0.w, l(0.500000)
+movc r0.w, r3.y, r1.x, r0.w
+mov r2.zw, l(0,0,0,0)
+ld_indexable(texture2d)(float,float,float,float) r1.x, r2.xyww, t1.xyzw
+ld_indexable(texture2d)(float,float,float,float) r2.xyz, r2.xyzw, t0.xyzw
+mad r2.xyz, r2.xyzx, l(2.000000, 2.000000, 2.000000, 0.000000), l(-1.000000, -1.000000, -1.000000, 0.000000)
+div r1.yz, r1.yyzy, r1.xxxx
+max r1.yz, r1.yyzy, cb0[1].zzzz
+min r1.yz, r0.wwww, r1.yyzy
+mul r3.xy, v0.xyxx, l(0.250000, 0.250000, 0.000000, 0.000000)
+frc r3.xy, r3.xyxx
+dp2 r1.w, r3.xyxx, l(1.000000, 0.250000, 0.000000, 0.000000)
+mul r1.w, r1.w, l(6.283100)
+sincos r3.x, r4.x, r1.w
+mov r5.x, -r3.x
+mov r5.y, r4.x
+mov r5.z, r3.x
+dp2 r3.x, l(-0.020000, -0.140000, 0.000000, 0.000000), r5.xyxx
+dp2 r3.y, l(-0.020000, -0.140000, 0.000000, 0.000000), r5.yzyy
+mad r3.xy, r3.xyxx, r1.yzyy, v1.xyxx
+mul r3.zw, r3.xxxy, cb13[33].xxxy
+mad r0.xy, r3.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.x, r3.zwzz, t2.wxyz, s0, l(0.000000)
+dp2 r4.x, l(0.240000, -0.040000, 0.000000, 0.000000), r5.xyxx
+dp2 r4.y, l(0.240000, -0.040000, 0.000000, 0.000000), r5.yzyy
+mad r4.xy, r4.xyxx, r1.yzyy, v1.xyxx
+mul r4.zw, r4.xxxy, cb13[33].xxxy
+mad r6.xy, r4.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.y, r4.zwzz, t2.xwyz, s0, l(0.000000)
+dp2 r4.x, l(0.080000, 0.360000, 0.000000, 0.000000), r5.xyxx
+dp2 r4.y, l(0.080000, 0.360000, 0.000000, 0.000000), r5.yzyy
+mad r4.xy, r4.xyxx, r1.yzyy, v1.xyxx
+mul r4.zw, r4.xxxy, cb13[33].xxxy
+mad r7.xy, r4.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.z, r4.zwzz, t2.xywz, s0, l(0.000000)
+dp2 r4.x, l(-0.400000, 0.260000, 0.000000, 0.000000), r5.xyxx
+dp2 r4.y, l(-0.400000, 0.260000, 0.000000, 0.000000), r5.yzyy
+mad r1.zw, r4.xxxy, r1.yyyz, v1.xxxy
+mul r1.y, r1.x, r1.y
+mul r1.y, r1.y, cb0[0].x
+mul r1.y, r1.y, cb13[37].y
+mul r1.y, r1.y, r1.y
+mul r4.xy, r1.zwzz, cb13[33].xyxx
+mad r8.xy, r1.zwzz, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.w, r4.xyxx, t2.xyzw, s0, l(0.000000)
+add r3.xyzw, r3.xyzw, l(1.000000012E-07, 1.000000012E-07, 1.000000012E-07, 1.000000012E-07)
+mul r3.xyzw, r3.xyzw, cb13[37].yyyy
+mad r4.xy, v1.xyxx, cb0[0].xyxx, cb0[0].zwzz
+mov r4.z, l(1.000000)
+mul r4.xyz, r1.xxxx, r4.xyzx
+mul r4.xyz, r4.xyzx, cb13[37].yyyy
+mad r0.xyz, r0.xyzx, r3.xxxx, -r4.xyzx
+dp3 r9.x, r0.xyzx, r0.xyzx
+mov r6.z, l(1.000000)
+mad r6.xyz, r6.xyzx, r3.yyyy, -r4.xyzx
+dp3 r9.y, r6.xyzx, r6.xyzx
+mov r7.z, l(1.000000)
+mad r3.xyz, r7.xyzx, r3.zzzz, -r4.xyzx
+dp3 r9.z, r3.xyzx, r3.xyzx
+mov r8.z, l(1.000000)
+mad r7.xyz, r8.xyzx, r3.wwww, -r4.xyzx
+dp3 r9.w, r7.xyzx, r7.xyzx
+rsq r8.xyzw, r9.xyzw
+mad r9.xyzw, r1.yyyy, l(0.392687500, 0.392687500, 0.392687500, 0.392687500), r9.xyzw
+mul r1.y, r1.y, l(0.392687500)
+mul r0.xyz, r0.xyzx, r8.xxxx
+dp3 r1.z, r2.xyzx, r2.xyzx
+rsq r1.z, r1.z
+mul r2.xyz, r1.zzzz, r2.xyzx
+dp3 r10.x, cb13[49].xyzx, r2.xyzx
+dp3 r10.y, cb13[50].xyzx, r2.xyzx
+dp3 r10.z, cb13[51].xyzx, r2.xyzx
+dp3 r1.z, r10.xyzx, r10.xyzx
+rsq r1.z, r1.z
+mul r2.xyz, r1.zzzz, r10.xyzx
+mul r2.xyz, r2.xyzx, l(1.000000, -1.000000, -1.000000, 0.000000)
+dp3_sat r10.x, r2.xyzx, r0.xyzx
+mul r6.xyz, r6.xyzx, r8.yyyy
+dp3_sat r10.y, r2.xyzx, r6.xyzx
+mul r3.xyz, r3.xyzx, r8.zzzz
+mul r7.xyz, r7.xyzx, r8.wwww
+dp3_sat r10.z, r2.xyzx, r3.xyzx
+dp3_sat r10.w, r2.xyzx, r7.xyzx
+mul r8.xyzw, r1.yyyy, r10.xyzw
+div r8.xyzw, r8.xyzw, r9.xyzw
+mul r1.yzw, r6.xxyz, r8.yyyy
+mad r0.xyz, r8.xxxx, r0.xyzx, r1.yzwy
+mad r0.xyz, r8.zzzz, r3.xyzx, r0.xyzx
+mad r0.xyz, r8.wwww, r7.xyzx, r0.xyzx
+dp4 r1.y, r8.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000)
+div r1.zw, cb0[1].xxxy, r1.xxxx
+max r1.zw, r1.zzzw, cb0[1].zzzz
+min r1.zw, r0.wwww, r1.zzzw
+dp2 r3.x, l(-0.340000, -0.440000, 0.000000, 0.000000), r5.xyxx
+dp2 r3.y, l(-0.340000, -0.440000, 0.000000, 0.000000), r5.yzyy
+mad r3.xy, r3.xyxx, r1.zwzz, v1.xyxx
+mul r3.zw, r3.xxxy, cb13[33].xxxy
+mad r6.xy, r3.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.x, r3.zwzz, t2.wxyz, s0, l(0.000000)
+dp2 r7.x, l(0.400000, -0.520000, 0.000000, 0.000000), r5.xyxx
+dp2 r7.y, l(0.400000, -0.520000, 0.000000, 0.000000), r5.yzyy
+mad r7.xy, r7.xyxx, r1.zwzz, v1.xyxx
+mul r7.zw, r7.xxxy, cb13[33].xxxy
+mad r8.xy, r7.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.y, r7.zwzz, t2.xwyz, s0, l(0.000000)
+dp2 r7.x, l(0.680000, 0.300000, 0.000000, 0.000000), r5.xyxx
+dp2 r9.x, l(-0.320000, 0.840000, 0.000000, 0.000000), r5.xyxx
+dp2 r7.y, l(0.680000, 0.300000, 0.000000, 0.000000), r5.yzyy
+dp2 r9.y, l(-0.320000, 0.840000, 0.000000, 0.000000), r5.yzyy
+mad r5.xy, r9.xyxx, r1.zwzz, v1.xyxx
+mad r5.zw, r7.xxxy, r1.zzzw, v1.xxxy
+mul r0.w, r1.x, r1.z
+mul r0.w, r0.w, cb0[0].x
+mul r0.w, r0.w, cb13[37].y
+mul r0.w, r0.w, r0.w
+mul r1.xz, r5.zzwz, cb13[33].xxyx
+mad r7.xy, r5.zwzz, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.z, r1.xzxx, t2.xywz, s0, l(0.000000)
+mul r1.xz, r5.xxyx, cb13[33].xxyx
+mad r5.xy, r5.xyxx, cb0[0].xyxx, cb0[0].zwzz
+sample_l_indexable(texture2d)(float,float,float,float) r3.w, r1.xzxx, t2.xyzw, s0, l(0.000000)
+add r3.xyzw, r3.xyzw, l(1.000000012E-07, 1.000000012E-07, 1.000000012E-07, 1.000000012E-07)
+mul r3.xyzw, r3.xyzw, cb13[37].yyyy
+mov r6.z, l(1.000000)
+mad r1.xzw, r6.xxyz, r3.xxxx, -r4.xxyz
+dp3 r6.x, r1.xzwx, r1.xzwx
+mov r8.z, l(1.000000)
+mad r8.xyz, r8.xyzx, r3.yyyy, -r4.xyzx
+dp3 r6.y, r8.xyzx, r8.xyzx
+mov r7.z, l(1.000000)
+mad r3.xyz, r7.xyzx, r3.zzzz, -r4.xyzx
+dp3 r6.z, r3.xyzx, r3.xyzx
+mov r5.z, l(1.000000)
+mad r4.xyz, r5.xyzx, r3.wwww, -r4.xyzx
+dp3 r6.w, r4.xyzx, r4.xyzx
+mad r5.xyzw, r0.wwww, l(1.96343756, 1.96343756, 1.96343756, 1.96343756), r6.xyzw
+rsq r6.xyzw, r6.xyzw
+mul r0.w, r0.w, l(1.96343756)
+mul r1.xzw, r1.xxzw, r6.xxxx
+dp3_sat r7.x, r2.xyzx, r1.xzwx
+mul r8.xyz, r6.yyyy, r8.xyzx
+dp3_sat r7.y, r2.xyzx, r8.xyzx
+mul r3.xyz, r3.xyzx, r6.zzzz
+mul r4.xyz, r4.xyzx, r6.wwww
+dp3_sat r7.z, r2.xyzx, r3.xyzx
+dp3_sat r7.w, r2.xyzx, r4.xyzx
+mul r2.xyzw, r0.wwww, r7.xyzw
+div r2.xyzw, r2.xyzw, r5.xyzw
+mul r5.xyz, r8.xyzx, r2.yyyy
+mad r1.xzw, r2.xxxx, r1.xxzw, r5.xxyz
+mad r1.xzw, r2.zzzz, r3.xxyz, r1.xxzw
+mad r1.xzw, r2.wwww, r4.xxyz, r1.xxzw
+dp4 r0.w, r2.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000)
+add r0.w, r0.w, r1.y
+mul o0.w, r0.w, l(0.150000)
+add r0.xyz, r0.xyzx, r1.xzwx
+mul r0.xyz, r0.xyzx, l(1.000000, -1.000000, -1.000000, 0.000000)
+dp3 r1.x, cb13[53].xyzx, r0.xyzx
+dp3 r1.y, cb13[54].xyzx, r0.xyzx
+dp3 r1.z, cb13[55].xyzx, r0.xyzx
+mad o0.xyz, r1.xyzx, l(0.075000, 0.075000, 0.075000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)
+ret
+// Approximately 167 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

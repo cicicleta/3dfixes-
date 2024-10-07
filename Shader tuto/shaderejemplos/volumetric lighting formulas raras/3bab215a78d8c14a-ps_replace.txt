@@ -1,0 +1,407 @@
+//Lighting PS 4.
+// ---- Created with 3Dmigoto v0.6.181 on Wed Dec 13 19:05:06 2023
+
+struct turokFog_s
+{
+    float4 vFogColor;              // Offset:    0
+    float4 vHeightFogColorStart;   // Offset:   16
+    float4 vHeightFogColorEnd;     // Offset:   32
+    float fFogZStart;              // Offset:   48
+    float fFogZEnd;                // Offset:   52
+    float fHeightFogFallOff;       // Offset:   56
+    float fHeightFogDensity;       // Offset:   60
+};
+
+cbuffer RenderView : register(b0)
+{
+  float4x4 uProjectionMatrix : packoffset(c0);
+  float4x4 uModelViewMatrix : packoffset(c4);
+  float4x4 uInverseProjectionMatrix : packoffset(c8);
+  float4x4 uPrevProjection : packoffset(c12);
+  float4x4 uInverseModelViewMatrix : packoffset(c16);
+  float4x4 uPrevModelView : packoffset(c20);
+  float4x4 uRotationMatrix : packoffset(c24);
+  float4x4 uInverseRotationMatrix : packoffset(c28);
+  float4x4 uTransposedRotationMatrix : packoffset(c32);
+  float4x4 uClipMatrix : packoffset(c36);
+  float4x4 uInverseClipMatrix : packoffset(c40);
+  float4x4 uPrevClipMatrix : packoffset(c44);
+  float4x4 uNormalMatrix : packoffset(c48);
+  float3 uViewOrigin : packoffset(c52);
+  float uViewWidth : packoffset(c52.w);
+  float uViewHeight : packoffset(c53);
+  float uZNear : packoffset(c53.y);
+  float uZFar : packoffset(c53.z);
+  float2 uInvFocalCoords : packoffset(c54);
+  float4 uResolutionScale : packoffset(c55);
+  float4 uScreenBounds : packoffset(c56);
+  float4 uFrustumCorners[4] : packoffset(c57);
+}
+
+SamplerState uSampletTexture_s : register(s0);
+Texture2DArray<float4> uTex_tTexture : register(t0);
+Texture2D<float4> uTex_tDepth : register(t1);
+StructuredBuffer<turokFog_s> sbFog : register(t7);
+
+
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+
+void main(
+  float4 v0 : SV_Position0,
+  float3 v1 : TEXCOORD0,
+  float w1 : SOFTNESS0,
+  float3 v2 : POSITION0,
+  float4 v3 : COLOR0,
+  float4 v4 : COLOR1,
+  float4 v5 : VERTPOS0,
+  out float4 o0 : SV_Target0)
+{
+  float4 r0,r1,r2,r3,r4;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+  
+  float4 stereo = StereoParams.Load(0);
+  
+  r0.xyzw = uTex_tTexture.Sample(uSampletTexture_s, v1.xyz).xyzw;
+  r1.xyzw = v3.xyzw * r0.xyzw;
+  r0.w = dot(v4.xyz, v4.xyz);
+  r0.w = cmp(0 < r0.w);
+  r0.xyz = float3(1,1,1) + -r0.xyz;
+  r0.xyz = v4.xyz * r0.xyz + r1.xyz;
+  r0.xyz = r0.www ? r0.xyz : r1.xyz;
+  r1.x = sbFog[0].fFogZStart;
+  r1.y = sbFog[0].fFogZEnd;
+  r1.z = sbFog[0].fHeightFogFallOff;
+  r1.xy = r1.xy / uZFar;
+  r0.w = -v2.z / uZFar;
+  r2.x = sbFog[0].vFogColor.x;
+  r2.y = sbFog[0].vFogColor.y;
+  r2.z = sbFog[0].vFogColor.z;
+  r1.y = r1.y + -r1.x;
+  r1.x = r0.w + -r1.x;
+  r1.y = 1 / r1.y;
+  r1.x = saturate(r1.x * r1.y);
+  r1.y = r1.x * -2 + 3;
+  r1.x = r1.x * r1.x;
+  r1.x = -r1.y * r1.x + 1;
+  r1.x = max(0, r1.x);
+  r0.xyz = -r2.xyz + r0.xyz;
+  r0.xyz = r1.xxx * r0.xyz + r2.xyz;
+  r1.x = cmp(0 < r1.z);
+  if (r1.x != 0) {
+    r1.x = v0.x / uViewWidth;
+    r1.y = v0.y / uViewHeight;
+    r2.xy = uScreenBounds.xy * uResolutionScale.zw;
+    r1.xy = r1.xy * uResolutionScale.zw + -r2.xy;
+	
+	r1.x+=stereo.x*(1-stereo.y/v2.z)*0.5;
+	
+    r1.z = 1 + -r1.y;
+    r1.xy = r1.xz * float2(2,2) + float2(-1,-1);
+    r1.xy = uInvFocalCoords.xy * r1.xy;
+    r1.xy = -v2.zz * r1.xy;
+    r2.xyz = uInverseModelViewMatrix._m01_m11_m21 * r1.yyy;
+    r1.xyz = uInverseModelViewMatrix._m00_m10_m20 * r1.xxx + r2.xyz;
+    r1.xyz = uInverseModelViewMatrix._m02_m12_m22 * v2.zzz + r1.xyz;
+    r1.xyz = uInverseModelViewMatrix._m03_m13_m23 + r1.xyz;
+    r1.xyz = uViewOrigin.xyz + -r1.xyz;
+    r1.x = dot(r1.xyz, r1.xyz);
+    r1.x = rsqrt(r1.x);
+    r1.x = r1.z * r1.x;
+    r2.x = sbFog[0].vHeightFogColorStart.x;
+    r2.y = sbFog[0].vHeightFogColorStart.y;
+    r2.z = sbFog[0].vHeightFogColorStart.z;
+    r2.w = sbFog[0].vHeightFogColorStart.w;
+    r3.x = sbFog[0].vHeightFogColorEnd.x;
+    r3.y = sbFog[0].vHeightFogColorEnd.y;
+    r3.z = sbFog[0].vHeightFogColorEnd.z;
+    r3.w = sbFog[0].vHeightFogColorEnd.w;
+    r1.y = uViewOrigin.z + -r2.w;
+    r1.z = cmp(0 < -r1.x);
+    r4.x = cmp(-r1.x < 0);
+    r1.z = (int)-r1.z + (int)r4.x;
+    r1.z = (int)r1.z;
+    r1.z = cmp(r1.z >= 0.100000001);
+    r1.z = r1.z ? 1.000000 : 0;
+    r1.z = r1.z * 2 + -1;
+    r1.x = r1.z * 9.99999975e-06 + -r1.x;
+    r4.x = sbFog[0].fHeightFogFallOff;
+    r4.y = sbFog[0].fHeightFogDensity;
+    r1.z = -v2.z * r1.x + r1.y;
+    r1.y = -r4.x * r1.y;
+    r1.y = 1.44269502 * r1.y;
+    r1.y = exp2(r1.y);
+    r4.z = -r4.x * r1.z;
+    r4.z = 1.44269502 * r4.z;
+    r4.z = exp2(r4.z);
+    r1.y = -r4.z + r1.y;
+    r1.x = r4.x * r1.x;
+    r1.x = r1.y / r1.x;
+    r1.x = -1.44269502 * r1.x;
+    r1.x = exp2(r1.x);
+    r1.x = min(1, r1.x);
+    r1.y = r1.z + -r2.w;
+    r3.xyzw = r3.wxyz + -r2.wxyz;
+    r1.y = saturate(r1.y / r3.x);
+    r2.xyz = r1.yyy * r3.yzw + r2.xyz;
+    r1.y = -v2.z * r4.y;
+    r1.y = -1.44269502 * r1.y;
+    r1.y = exp2(r1.y);
+    r1.xy = float2(1,1) + -r1.xy;
+    r1.y = r1.x * r1.y;
+    r2.xyz = r1.xxx * r2.xyz + -r0.xyz;
+    o0.xyz = r1.yyy * r2.xyz + r0.xyz;
+  } else {
+    o0.xyz = r0.xyz;
+  }
+  r0.x = cmp(0 < w1.x);
+  if (r0.x != 0) {
+    r2.xy = (int2)v0.xy;
+    r2.zw = float2(0,0);
+    r0.x = uTex_tDepth.Load(r2.xyz).x;
+    r0.y = uZFar + -uZNear;
+    r0.z = -uZFar / r0.y;
+    r1.x = uZFar * uZNear;
+    r0.y = -r1.x / r0.y;
+    r1.x = -r0.y * r0.z;
+    r1.x = cmp(r1.x < 0);
+    r0.z = r1.x ? -r0.z : r0.z;
+    r0.x = r0.z + -r0.x;
+    r0.x = -r0.y / r0.x;
+    r0.x = r0.x / uZFar;
+    r0.y = cmp(r0.x < r0.w);
+    if (r0.y != 0) {
+      if (-1 != 0) discard;
+      return;
+    }
+    r0.x = saturate(r0.x + -r0.w);
+    r0.y = 1 / w1.x;
+    r0.x = saturate(r0.x * r0.y);
+    r0.y = r0.x * -2 + 3;
+    r0.x = r0.x * r0.x;
+    r0.x = r0.y * r0.x;
+  } else {
+    r0.x = 1;
+  }
+  o0.w = r1.w * r0.x;
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) HLSL Shader Compiler 10.1
+//
+//   using 3Dmigoto v0.6.181 on Wed Dec 13 19:05:06 2023
+//
+//
+// Buffer Definitions:
+//
+// cbuffer RenderView
+// {
+//
+//   float4x4 uProjectionMatrix;        // Offset:    0 Size:    64 [unused]
+//   float4x4 uModelViewMatrix;         // Offset:   64 Size:    64 [unused]
+//   float4x4 uInverseProjectionMatrix; // Offset:  128 Size:    64 [unused]
+//   float4x4 uPrevProjection;          // Offset:  192 Size:    64 [unused]
+//   float4x4 uInverseModelViewMatrix;  // Offset:  256 Size:    64
+//   float4x4 uPrevModelView;           // Offset:  320 Size:    64 [unused]
+//   float4x4 uRotationMatrix;          // Offset:  384 Size:    64 [unused]
+//   float4x4 uInverseRotationMatrix;   // Offset:  448 Size:    64 [unused]
+//   float4x4 uTransposedRotationMatrix;// Offset:  512 Size:    64 [unused]
+//   float4x4 uClipMatrix;              // Offset:  576 Size:    64 [unused]
+//   float4x4 uInverseClipMatrix;       // Offset:  640 Size:    64 [unused]
+//   float4x4 uPrevClipMatrix;          // Offset:  704 Size:    64 [unused]
+//   float4x4 uNormalMatrix;            // Offset:  768 Size:    64 [unused]
+//   float3 uViewOrigin;                // Offset:  832 Size:    12
+//   float uViewWidth;                  // Offset:  844 Size:     4
+//   float uViewHeight;                 // Offset:  848 Size:     4
+//   float uZNear;                      // Offset:  852 Size:     4
+//   float uZFar;                       // Offset:  856 Size:     4
+//   float2 uInvFocalCoords;            // Offset:  864 Size:     8
+//   float4 uResolutionScale;           // Offset:  880 Size:    16
+//   float4 uScreenBounds;              // Offset:  896 Size:    16
+//   float4 uFrustumCorners[4];         // Offset:  912 Size:    64 [unused]
+//
+// }
+//
+// Resource bind info for sbFog
+// {
+//
+//   struct turokFog_s
+//   {
+//
+//       float4 vFogColor;              // Offset:    0
+//       float4 vHeightFogColorStart;   // Offset:   16
+//       float4 vHeightFogColorEnd;     // Offset:   32
+//       float fFogZStart;              // Offset:   48
+//       float fFogZEnd;                // Offset:   52
+//       float fHeightFogFallOff;       // Offset:   56
+//       float fHeightFogDensity;       // Offset:   60
+//
+//   } $Element;                        // Offset:    0 Size:    64
+//
+// }
+//
+//
+// Resource Bindings:
+//
+// Name                                 Type  Format         Dim Slot Elements
+// ------------------------------ ---------- ------- ----------- ---- --------
+// uSampletTexture                   sampler      NA          NA    0        1
+// uTex_tTexture                     texture  float4     2darray    0        1
+// uTex_tDepth                       texture  float4          2d    1        1
+// sbFog                             texture  struct         r/o    7        1
+// RenderView                        cbuffer      NA          NA    0        1
+//
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Position              0   xyzw        0      POS   float   xy
+// TEXCOORD                 0   xyz         1     NONE   float   xyz
+// SOFTNESS                 0      w        1     NONE   float      w
+// POSITION                 0   xyz         2     NONE   float     z
+// COLOR                    0   xyzw        3     NONE   float   xyzw
+// COLOR                    1   xyzw        4     NONE   float   xyz
+// VERTPOS                  0   xyzw        5     NONE   float
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Target                0   xyzw        0   TARGET   float   xyzw
+//
+ps_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer CB0[57], immediateIndexed
+dcl_sampler s0, mode_default
+dcl_resource_texture2darray (float,float,float,float) t0
+dcl_resource_texture2d (float,float,float,float) t1
+dcl_resource_structured t7, 64
+dcl_input_ps_siv linear noperspective v0.xy, position
+dcl_input_ps linear v1.xyz
+dcl_input_ps linear v1.w
+dcl_input_ps linear v2.z
+dcl_input_ps linear v3.xyzw
+dcl_input_ps linear v4.xyz
+dcl_output o0.xyzw
+dcl_temps 5
+sample_indexable(texture2darray)(float,float,float,float) r0.xyzw, v1.xyzx, t0.xyzw, s0
+mul r1.xyzw, r0.xyzw, v3.xyzw
+dp3 r0.w, v4.xyzx, v4.xyzx
+lt r0.w, l(0.000000), r0.w
+add r0.xyz, -r0.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)
+mad r0.xyz, v4.xyzx, r0.xyzx, r1.xyzx
+movc r0.xyz, r0.wwww, r0.xyzx, r1.xyzx
+ld_structured_indexable(structured_buffer, stride=64)(mixed,mixed,mixed,mixed) r1.xyz, l(0), l(48), t7.xyzx
+div r1.xy, r1.xyxx, cb0[53].zzzz
+div r0.w, -v2.z, cb0[53].z
+ld_structured_indexable(structured_buffer, stride=64)(mixed,mixed,mixed,mixed) r2.xyz, l(0), l(0), t7.xyzx
+add r1.y, -r1.x, r1.y
+add r1.x, -r1.x, r0.w
+div r1.y, l(1.000000, 1.000000, 1.000000, 1.000000), r1.y
+mul_sat r1.x, r1.y, r1.x
+mad r1.y, r1.x, l(-2.000000), l(3.000000)
+mul r1.x, r1.x, r1.x
+mad r1.x, -r1.y, r1.x, l(1.000000)
+max r1.x, r1.x, l(0.000000)
+add r0.xyz, r0.xyzx, -r2.xyzx
+mad r0.xyz, r1.xxxx, r0.xyzx, r2.xyzx
+lt r1.x, l(0.000000), r1.z
+if_nz r1.x
+  div r1.x, v0.x, cb0[52].w
+  div r1.y, v0.y, cb0[53].x
+  mul r2.xy, cb0[55].zwzz, cb0[56].xyxx
+  mad r1.xy, r1.xyxx, cb0[55].zwzz, -r2.xyxx
+  add r1.z, -r1.y, l(1.000000)
+  mad r1.xy, r1.xzxx, l(2.000000, 2.000000, 0.000000, 0.000000), l(-1.000000, -1.000000, 0.000000, 0.000000)
+  mul r1.xy, r1.xyxx, cb0[54].xyxx
+  mul r1.xy, r1.xyxx, -v2.zzzz
+  mul r2.xyz, r1.yyyy, cb0[17].xyzx
+  mad r1.xyz, cb0[16].xyzx, r1.xxxx, r2.xyzx
+  mad r1.xyz, cb0[18].xyzx, v2.zzzz, r1.xyzx
+  add r1.xyz, r1.xyzx, cb0[19].xyzx
+  add r1.xyz, -r1.xyzx, cb0[52].xyzx
+  dp3 r1.x, r1.xyzx, r1.xyzx
+  rsq r1.x, r1.x
+  mul r1.x, r1.x, r1.z
+  ld_structured_indexable(structured_buffer, stride=64)(mixed,mixed,mixed,mixed) r2.xyzw, l(0), l(16), t7.xyzw
+  ld_structured_indexable(structured_buffer, stride=64)(mixed,mixed,mixed,mixed) r3.xyzw, l(0), l(32), t7.xyzw
+  add r1.y, -r2.w, cb0[52].z
+  lt r1.z, l(0.000000), -r1.x
+  lt r4.x, -r1.x, l(0.000000)
+  iadd r1.z, -r1.z, r4.x
+  itof r1.z, r1.z
+  ge r1.z, r1.z, l(0.100000)
+  and r1.z, r1.z, l(0x3f800000)
+  mad r1.z, r1.z, l(2.000000), l(-1.000000)
+  mad r1.x, r1.z, l(0.000010), -r1.x
+  ld_structured_indexable(structured_buffer, stride=64)(mixed,mixed,mixed,mixed) r4.xy, l(0), l(56), t7.xyxx
+  mad r1.z, -v2.z, r1.x, r1.y
+  mul r1.y, r1.y, -r4.x
+  mul r1.y, r1.y, l(1.442695)
+  exp r1.y, r1.y
+  mul r4.z, r1.z, -r4.x
+  mul r4.z, r4.z, l(1.442695)
+  exp r4.z, r4.z
+  add r1.y, r1.y, -r4.z
+  mul r1.x, r1.x, r4.x
+  div r1.x, r1.y, r1.x
+  mul r1.x, r1.x, l(-1.442695)
+  exp r1.x, r1.x
+  min r1.x, r1.x, l(1.000000)
+  add r1.y, -r2.w, r1.z
+  add r3.xyzw, -r2.wxyz, r3.wxyz
+  div_sat r1.y, r1.y, r3.x
+  mad r2.xyz, r1.yyyy, r3.yzwy, r2.xyzx
+  mul r1.y, r4.y, -v2.z
+  mul r1.y, r1.y, l(-1.442695)
+  exp r1.y, r1.y
+  add r1.xy, -r1.xyxx, l(1.000000, 1.000000, 0.000000, 0.000000)
+  mul r1.y, r1.y, r1.x
+  mad r2.xyz, r1.xxxx, r2.xyzx, -r0.xyzx
+  mad o0.xyz, r1.yyyy, r2.xyzx, r0.xyzx
+else
+  mov o0.xyz, r0.xyzx
+endif
+lt r0.x, l(0.000000), v1.w
+if_nz r0.x
+  ftoi r2.xy, v0.xyxx
+  mov r2.zw, l(0,0,0,0)
+  ld_indexable(texture2d)(float,float,float,float) r0.x, r2.xyzw, t1.xyzw
+  add r0.y, -cb0[53].y, cb0[53].z
+  div r0.z, -cb0[53].z, r0.y
+  mul r1.x, cb0[53].y, cb0[53].z
+  div r0.y, -r1.x, r0.y
+  mul r1.x, r0.z, -r0.y
+  lt r1.x, r1.x, l(0.000000)
+  movc r0.z, r1.x, -r0.z, r0.z
+  add r0.x, -r0.x, r0.z
+  div r0.x, -r0.y, r0.x
+  div r0.x, r0.x, cb0[53].z
+  lt r0.y, r0.x, r0.w
+  if_nz r0.y
+    discard_nz l(-1)
+    ret
+  endif
+  add_sat r0.x, -r0.w, r0.x
+  div r0.y, l(1.000000, 1.000000, 1.000000, 1.000000), v1.w
+  mul_sat r0.x, r0.y, r0.x
+  mad r0.y, r0.x, l(-2.000000), l(3.000000)
+  mul r0.x, r0.x, r0.x
+  mul r0.x, r0.x, r0.y
+else
+  mov r0.x, l(1.000000)
+endif
+mul o0.w, r0.x, r1.w
+ret
+// Approximately 109 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

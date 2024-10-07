@@ -1,0 +1,306 @@
+//HUD VS 1.
+// ---- Created with 3Dmigoto v0.6.163 on Sat May 18 10:02:48 2024
+
+cbuffer _Globals : register(b0)
+{
+  float4 ScreenSize : packoffset(c0);
+}
+
+struct vb0
+{
+    float3 pos;
+};
+
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+// Depth buffer copied to this input with 3Dmigoto:
+// Texture2D<float> DepthBuffer : register(t110);
+Texture2DArray<float> DepthBuffer : register(t110);
+
+static const float near = 0.00001;
+static const float far = 1;
+
+float world_z_from_depth_buffer(float x, float y, int eye)
+{
+    uint width, height, elements = 0;
+    float z;
+
+    DepthBuffer.GetDimensions(width, height, elements);
+
+    x = min(max((x / 2 + 0.5) * width, 0), width - 1);
+    y = min(max((-y / 2 + 0.5) * height, 0), height - 1);
+    z = DepthBuffer.Load(int4(x, y, eye, 0)).x;
+    if (z == 0)
+        return 0;
+
+  return (far*near/((z)*near) + (far*z));
+}
+
+float adjust_from_depth_buffer(float x, float y, float numsamples, float convmult)
+{
+    float4 stereo = StereoParams.Load(0);
+    float separation = stereo.x; float convergence = stereo.y;
+    float old_offset, offset, w, sampled_w, distance;
+    uint i;
+
+    // Stereo cursor: To improve the accuracy of the stereo cursor, we
+    // sample a number of points on the depth buffer, starting at the near
+    // clipping plane and working towards original x + separation.
+    //
+    // You can think of this as a line in three dimensional space that
+    // starts at each eye and stretches out towards infinity. We sample 255
+    // points along this line (evenly spaced in the X axis) and compare
+    // with the depth buffer to find where the line is first intersected.
+    //
+    // Note: The reason for sampling 255 points came from a restriction in
+    // DX9/SM3 where loops had to run a constant number of iterations and
+    // there was no way to set that number from within the shader itself.
+    // I'm not sure if the same restriction applies in DX11 with SM4/5 - if
+    // it doesn't, we could change this to check each pixel instead for
+    // better accuracy.
+    //
+    // Based on DarkStarSword's stereo crosshair code originally developed
+    // for Miasmata, adapted to Unity, then translated to HLSL.
+
+    offset = (near - convergence) * separation*0.2; // Z = X offset from center
+    distance = separation - offset;         // Total distance to cover (separation - starting X offset)
+
+    old_offset = offset;
+    for (i = 0; i < numsamples; i++) {
+        offset += distance / numsamples;
+
+        // Calculate depth for this point on the line:
+        w = (separation * convergence*convmult) / (separation - offset);
+		
+		sampled_w = world_z_from_depth_buffer(x + offset, y, 0);
+        //sampled_w = world_z_from_depth_buffer(x + offset * stereo.z, y);
+		
+		//float left = min((x + offset), 0);
+        //float right = max((x - offset), 0);
+        //float left_sampled_w = world_z_from_depth_buffer(left, y, 0);
+        //float right_sampled_w = world_z_from_depth_buffer(right, y, 1);
+        //sampled_w = max(left_sampled_w, right_sampled_w);
+		
+        if (sampled_w == 0)
+            return separation;
+
+        // If the sampled depth is closer than the calculated depth,
+        // we have found something that intersects the line, so exit
+        // the loop and return the last point that was not intersected:
+        if (w > sampled_w)
+            break;
+
+        old_offset = offset;
+    }
+
+    return old_offset;
+}
+
+void main(
+  float4 v0 : POSITION0,
+  float4 v1 : COLOR0,
+  float2 v2 : TEXCOORD0,
+  out float4 o0 : SV_Position0,
+  out float4 o1 : COLOR0,
+  out float2 o2 : TEXCOORD0,
+  uint vID : SV_VertexID,
+  out float o3 : TEXCOORD1)
+{
+  float4 stereo = StereoParams.Load(0);
+  float4 iniparams1 = IniParams.Load(int2(1,0));
+  float4 iniparams3 = IniParams.Load(int2(3,0));
+  float4 iniparams11 = IniParams.Load(int2(11,0));
+  
+  //uint first_vID_in_quad = vID - (vID % 4);
+  //float3 first_vertex = VertexBuffer[first_vID_in_quad].pos;
+  //
+  //float4 r10;
+  //r10.xy = first_vertex.xy * ScreenSize.xy + ScreenSize.zw;
+  //r10.z = first_vertex.z;
+  //r10.w = 1;
+  
+  o0.xy = v0.xy * ScreenSize.xy + ScreenSize.zw;
+  o0.z = v0.z;
+  o0.w = 1;
+  
+  float2 coords = float2(0,0);
+  
+  //Spanish atlas.
+  float spanishVignette = iniparams3.w==1 && (v2.x>=(5221.0/8192.0) && v2.x<(5943.0/8192.0) && v2.y>=(2.0/4096.0) && v2.y<(723.0/4096.0));
+  float spanishCrosshair = v2.x>=(3825.0/8192.0) && v2.x<(3868.0/8192.0) && v2.y>=(1535.0/4096.0) && v2.y<(1572.0/4096.0);
+  float spanishPhotoCrosshair = v2.x>=(5498.0/8192.0) && v2.x<(6620.0/8192.0) && v2.y>=(514.0/4096.0) && v2.y<(906.0/4096.0) && (o0.y>=-0.302);
+  float spanishPhotoCrosshairAfter = v2.x>=(6937.0/8192.0) && v2.x<(7046.0/8192.0) && v2.y>=(2440.0/4096.0) && v2.y<(2550.0/4096.0);
+  float spanishRedAndExclamationObjectives = v2.x>=(2172.0/8192.0) && v2.x<(2664.0/8192.0) && v2.y>=(1796.0/4096.0) && v2.y<(2155.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishQuestionMarkObjectives = v2.x>=(4972.0/8192.0) && v2.x<(5095.0/8192.0) && v2.y>=(2902.0/4096.0) && v2.y<(3053.0/4096) && (o0.x<0.6 || o0.y<0.3);
+  float spanishMissionNewAndCompleteCheck = v2.x>=0.0 && v2.x<(490.0/8192.0) && v2.y>=(1803.0/4096.0) && v2.y<(2121.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishMissionExclamationWithText = v2.x>=(1036.0/8192) && v2.x<(1160.0/8192.0) && v2.y>=(2924.0/4096.0) && v2.y<(3087.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishStraightDownTriangle = v2.x>=(4774.0/8192.0) && v2.x<(4872.0/8192.0) && v2.y>=(3815.0/4096.0) && v2.y<(3896.0/4096.0);
+  float spanishSwordEnemyIcon = v2.x>=(7276.0/8192.0) && v2.x<(7400.0/8192.0) && v2.y>=(2875.0/4096.0) && v2.y<(3024.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishSidequestExclamation = v2.x>=(3603.0/8192.0) && v2.x<(3730.0/8192.0) && v2.y>=(2930.0/4096.0) && v2.y<(3075.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishSidequestCheck = v2.x>=(911.0/8192) && v2.x<(1038.0/8192.0) && v2.y>=(2928.0/4096.0) && v2.y<(3075.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishSidequestExclamationProgress = v2.x>=(6378.0/8192.0) && v2.x<(6507.0/8192.0) && v2.y>=(2928.0/4096) && v2.y<(3074.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishBattleMission = v2.x>=(1933.0/8192.0) && v2.x<(2194.0/8192.0) && v2.y>=(1736.0/4096.0) && v2.y<(2027.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishBattleMissionSpiked = v2.x>=(7912.0/8192.0) && v2.x<(8153.0/8192.0) && v2.y>=(1388.0/4096.0) && v2.y<(1677.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float spanishNewNotice = v2.x>=(6841.0/8192.0) && v2.x<(6989.0/8192.0) && v2.y>=(2720.0/4096.0) && v2.y<(2874.0/4096.0);
+  float spanishBuildingLevelUp = v2.x>=(5210.0/8192.0) && v2.x<(5355.0/8192.0) && v2.y>=(2724.0/4096.0) && v2.y<(2869.0/4096.0);
+  //float spanishEnemyLifeBar = v2.x>=(3360.0/8192.0) && v2.x<(3405.0/8192.0) && v2.y>=(1630.0/4096.0) && v2.y<(1657.0/4096.0) && (o0.x>-0.6 || o0.y<0.8);
+  //float spanishEnemyLifeBarContainer = v2.x>=(1910.0/8192.0) && v2.x<(1967.0/8192.0) && v2.y>=(1370.0/4096.0) && v2.y<(1411.0/4096.0) && (o0.x>-0.6 || o0.y<0.8);
+  
+  //float spanishSticky = iniparams3.w==1 && (spanishPhotoCrosshairAfter || spanishRedAndExclamationObjectives || spanishQuestionMarkObjectives || spanishMissionNewAndCompleteCheck || spanishMissionExclamationWithText || spanishStraightDownTriangle || spanishSwordEnemyIcon || spanishSidequestExclamation || spanishSidequestCheck || spanishSidequestExclamationProgress || spanishBattleMission || spanishBattleMissionSpiked || spanishNewNotice || spanishBuildingLevelUp);
+  //float spanishConditions = iniparams3.w==1 && (spanishCrosshair || spanishPhotoCrosshairAfter || spanishRedAndExclamationObjectives || spanishQuestionMarkObjectives || spanishMissionNewAndCompleteCheck || spanishMissionExclamationWithText || spanishStraightDownTriangle || spanishSwordEnemyIcon || spanishSidequestExclamation || spanishSidequestCheck || spanishSidequestExclamationProgress || spanishBattleMission || spanishBattleMissionSpiked || spanishNewNotice || spanishBuildingLevelUp);
+  float spanishSticky = iniparams3.w==1 && (spanishPhotoCrosshairAfter);
+  float spanishConditions = iniparams3.w==1 && (spanishCrosshair || spanishPhotoCrosshairAfter);
+  
+  //English atlas.
+  float englishVignette = iniparams3.w==2 && (v2.x>=(5221.0/8192.0) && v2.x<(5943.0/8192.0) && v2.y>=(2.0/4096.0) && v2.y<(723.0/4096.0));
+  float englishCrosshair = v2.x>=(8156.0/8192.0) && v2.x<(8193.0/8192.0) && v2.y>=(1385.0/4096.0) && v2.y<(1419.0/4096.0);
+  float englishPhotoCrosshair = v2.x>=(5498.0/8192.0) && v2.x<(6620.0/8192.0) && v2.y>=(514.0/4096.0) && v2.y<(906.0/4096.0) && (o0.y>=-0.302);
+  float englishPhotoCrosshairAfter = v2.x>=(1678.0/8192.0) && v2.x<(1783.0/8192.0) && v2.y>=(2620.0/4096.0) && v2.y<(2725.0/4096.0);
+  float englishRedAndExclamationObjectives = v2.x>=(7035.0/8192.0) && v2.x<(7450.0/8192.0) && v2.y>=(1880.0/4096.0) && v2.y<(2080.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishQuestionMarkObjectives = v2.x>=(2405.0/8192.0) && v2.x<(2522.0/8192.0) && v2.y>=(2902.0/4096.0) && v2.y<(3053.0/4096) && (o0.x<0.6 || o0.y<0.3);
+  float englishMissionNewAndCompleteCheck = ((v2.x>=3240.0 && v2.x<(3470.0/8192.0) && v2.y>=(1782.0/4096.0) && v2.y<(2053.0/4096.0)) || (v2.x>=4545.0 && v2.x<(4774.0/8192.0) && v2.y>=(1765.0/4096.0) && v2.y<(2035.0/4096.0))) && (o0.x<0.6 || o0.y<0.3);
+  //Till here fixed.
+  float englishMissionExclamationWithText = v2.x>=(1036.0/8192) && v2.x<(1160.0/8192.0) && v2.y>=(2924.0/4096.0) && v2.y<(3087.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishStraightDownTriangle = v2.x>=(4774.0/8192.0) && v2.x<(4872.0/8192.0) && v2.y>=(3815.0/4096.0) && v2.y<(3896.0/4096.0);
+  float englishSwordEnemyIcon = v2.x>=(7276.0/8192.0) && v2.x<(7400.0/8192.0) && v2.y>=(2875.0/4096.0) && v2.y<(3024.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishSidequestExclamation = v2.x>=(3603.0/8192.0) && v2.x<(3730.0/8192.0) && v2.y>=(2930.0/4096.0) && v2.y<(3075.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishSidequestCheck = v2.x>=(911.0/8192) && v2.x<(1038.0/8192.0) && v2.y>=(2928.0/4096.0) && v2.y<(3075.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishSidequestExclamationProgress = v2.x>=(6378.0/8192.0) && v2.x<(6507.0/8192.0) && v2.y>=(2928.0/4096) && v2.y<(3074.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishBattleMission = v2.x>=(1933.0/8192.0) && v2.x<(2194.0/8192.0) && v2.y>=(1736.0/4096.0) && v2.y<(2027.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishBattleMissionSpiked = v2.x>=(7912.0/8192.0) && v2.x<(8153.0/8192.0) && v2.y>=(1388.0/4096.0) && v2.y<(1677.0/4096.0) && (o0.x<0.6 || o0.y<0.3);
+  float englishNewNotice = v2.x>=(6841.0/8192.0) && v2.x<(6989.0/8192.0) && v2.y>=(2720.0/4096.0) && v2.y<(2874.0/4096.0);
+  float englishBuildingLevelUp = v2.x>=(5210.0/8192.0) && v2.x<(5355.0/8192.0) && v2.y>=(2724.0/4096.0) && v2.y<(2869.0/4096.0);
+  //float englishEnemyLifeBar = v2.x>=(3360.0/8192.0) && v2.x<(3405.0/8192.0) && v2.y>=(1630.0/4096.0) && v2.y<(1657.0/4096.0) && (o0.x>-0.6 || o0.y<0.8);
+  //float englishEnemyLifeBarContainer = v2.x>=(1910.0/8192.0) && v2.x<(1967.0/8192.0) && v2.y>=(1370.0/4096.0) && v2.y<(1411.0/4096.0) && (o0.x>-0.6 || o0.y<0.8);
+  
+  //float englishSticky = iniparams3.w==2 && (englishPhotoCrosshairAfter || englishRedAndExclamationObjectives || englishQuestionMarkObjectives || englishMissionNewAndCompleteCheck || englishMissionExclamationWithText || englishStraightDownTriangle || englishSwordEnemyIcon || englishSidequestExclamation || englishSidequestCheck || englishSidequestExclamationProgress || englishBattleMission || englishBattleMissionSpiked || englishNewNotice || englishBuildingLevelUp);
+  //float englishConditions = iniparams3.w==2 && (englishCrosshair || englishPhotoCrosshairAfter || englishRedAndExclamationObjectives || englishQuestionMarkObjectives || englishMissionNewAndCompleteCheck || englishMissionExclamationWithText || englishStraightDownTriangle || englishSwordEnemyIcon || englishSidequestExclamation || englishSidequestCheck || englishSidequestExclamationProgress || englishBattleMission || englishBattleMissionSpiked || englishNewNotice || englishBuildingLevelUp);
+  float englishSticky = iniparams3.w==2 && (englishPhotoCrosshairAfter);
+  float englishConditions = iniparams3.w==2 && (englishCrosshair || englishPhotoCrosshairAfter);
+  
+  
+  //French atlas.
+  float frenchVignette = iniparams3.w==3 && (v2.x>=(5221.0/8192.0) && v2.x<(5943.0/8192.0) && v2.y>=(2.0/4096.0) && v2.y<(723.0/4096.0));
+  float frenchCrosshair = v2.x>=(3825.0/8192.0) && v2.x<(3868.0/8192.0) && v2.y>=(1498.0/4096.0) && v2.y<(1536.0/4096.0);
+  float frenchPhotoCrosshairAfter = v2.x>=(8084.0/8192.0) && v2.x<(8193.0/8192.0) && v2.y>=(2492.0/4096.0) && v2.y<(2597.0/4096.0);
+  
+  float frenchSticky = iniparams3.w==3 && (frenchPhotoCrosshairAfter);
+  float frenchConditions = iniparams3.w==3 && (frenchCrosshair || frenchPhotoCrosshairAfter);
+  
+  
+  //Italian atlas.
+  float italianVignette = iniparams3.w==4 && (v2.x>=(2914.0/4096.0) && v2.x<(3635.0/4096.0) && v2.y>=(742.0/8192.0) && v2.y<(1462.0/8192.0));
+  float italianCrosshair = v2.x>=(2510.0/4096.0) && v2.x<(2543.0/4096.0) && v2.y>=(3428.0/8192.0) && v2.y<(3461.0/8192.0);
+  float italianPhotoCrosshairAfter = v2.x>=(3563.0/4096.0) && v2.x<(3671.0/4096.0) && v2.y>=(4225.0/8192.0) && v2.y<(4331.0/8192.0);
+  
+  float italianSticky = iniparams3.w==4 && (italianPhotoCrosshairAfter);
+  float italianConditions = iniparams3.w==4 && (italianCrosshair || italianPhotoCrosshairAfter);
+  
+  
+  //German atlas.
+  float germanVignette = iniparams3.w==5 && (v2.x>=(5221.0/8192.0) && v2.x<(5943.0/8192.0) && v2.y>=(2.0/4096.0) && v2.y<(723.0/4096.0));
+  float germanCrosshair = v2.x>=(8156.0/8192.0) && v2.x<(8193.0/8192.0) && v2.y>=(1530.0/4096.0) && v2.y<(1563.0/4096.0);
+  float germanPhotoCrosshairAfter = v2.x>=(4761.0/8192.0) && v2.x<(4867.0/8192.0) && v2.y>=(3008.0/4096.0) && v2.y<(3113.0/4096.0);
+  
+  float germanSticky = iniparams3.w==5 && (germanPhotoCrosshairAfter);
+  float germanConditions = iniparams3.w==5 && (germanCrosshair || germanPhotoCrosshairAfter);
+  
+  
+  //Japanese atlas.
+  float japaneseVignette = iniparams3.w==6 && (v2.x>=(5221.0/8192.0) && v2.x<(5943.0/8192.0) && v2.y>=(2.0/4096.0) && v2.y<(723.0/4096.0));
+  float japaneseCrosshair = v2.x>=(8156.0/8192.0) && v2.x<(8193.0/8192.0) && v2.y>=(1566.0/4096.0) && v2.y<(1599.0/4096.0);
+  float japanesePhotoCrosshairAfter = v2.x>=(520.0/8192.0) && v2.x<(627.0/8192.0) && v2.y>=(1828.0/4096.0) && v2.y<(1933.0/4096.0);
+  
+  float japaneseSticky = iniparams3.w==6 && (japanesePhotoCrosshairAfter);
+  float japaneseConditions = iniparams3.w==6 && (japaneseCrosshair || japanesePhotoCrosshairAfter);
+  
+  
+  float vignetteConditions = spanishVignette || englishVignette || frenchVignette || italianVignette || germanVignette || japaneseVignette;
+  
+  float correction = 0.0;
+  
+  if (spanishSticky || englishSticky || frenchSticky || italianSticky || germanSticky || japaneseSticky) {
+    coords.xy = float2(o0.x,o0.y);
+  }
+  
+  if (iniparams11.x==0 && (spanishConditions || englishConditions || frenchConditions || italianConditions || germanConditions || japaneseConditions)) {
+    correction = adjust_from_depth_buffer(coords.x,coords.y,400,10.0);
+  } else if (iniparams11.x==0 && iniparams3.w!=10 && !vignetteConditions) {
+    //o0.x+=stereo.x*0.5;
+	correction = adjust_from_depth_buffer(0,-0.5,400,10.0);
+  }
+  
+  o0.x+=correction;
+  o3 = correction;
+  
+  if (iniparams1.z==1 && vignetteConditions) {
+    o0.xyzw = 0;
+  }
+  
+  o1.xyzw = v1.xyzw;
+  o2.xy = v2.xy;
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) HLSL Shader Compiler 9.29.952.3111
+//
+//   using 3Dmigoto v0.6.163 on Sat May 18 10:02:48 2024
+//
+//
+// Buffer Definitions:
+//
+// cbuffer $Globals
+// {
+//
+//   float4 ScreenSize;                 // Offset:    0 Size:    16
+//
+// }
+//
+//
+// Resource Bindings:
+//
+// Name                                 Type  Format         Dim Slot Elements
+// ------------------------------ ---------- ------- ----------- ---- --------
+// $Globals                          cbuffer      NA          NA    0        1
+//
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// POSITION                 0   xyzw        0     NONE   float   xyz
+// COLOR                    0   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 0   xy          2     NONE   float   xy
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_Position              0   xyzw        0      POS   float   xyzw
+// COLOR                    0   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 0   xy          2     NONE   float   xy
+//
+vs_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer CB0[1], immediateIndexed
+dcl_input v0.xyz
+dcl_input v1.xyzw
+dcl_input v2.xy
+dcl_output_siv o0.xyzw, position
+dcl_output o1.xyzw
+dcl_output o2.xy
+mad o0.xy, v0.xyxx, cb0[0].xyxx, cb0[0].zwzz
+mov o0.z, v0.z
+mov o0.w, l(1.000000)
+mov o1.xyzw, v1.xyzw
+mov o2.xy, v2.xyxx
+ret
+// Approximately 6 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
