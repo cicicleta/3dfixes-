@@ -1,0 +1,10 @@
+float valor1 = lerp(0.05, 0.065, (fov + 17) / (-2));
+o0.x += separation * (o0.w - convergence * fov * valor1);
+
+float valor1 = lerp(0.05, 0.065, saturate((fov + 17) / -2));
+o0.x += separation * (o0.w - convergence * fov * valor1);
+
+
+float valor1 = 0.05 + ((fov + 17) / -2) * (0.065 - 0.05);
+o0.x += separation * (o0.w - convergence * fov * valor1);
+
