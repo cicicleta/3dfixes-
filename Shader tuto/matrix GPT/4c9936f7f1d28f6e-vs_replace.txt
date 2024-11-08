@@ -1,0 +1,97 @@
+cbuffer cb3 : register(b3)
+{
+  float4 cb3[21];
+}
+
+cbuffer cb2 : register(b2)
+{
+  float4 cb2[4];
+}
+
+cbuffer cb1 : register(b1)
+{
+  float4 cb1[6];
+}
+
+cbuffer cb0 : register(b0)
+{
+  float4 cb0[3];
+}
+
+// 3Dmigoto declarations
+#define cmp - 
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+
+matrix inverse(matrix m)
+{
+    return inverse(m);
+}
+matrix inverse(float4 m0, float4 m1, float4 m2, float4 m3)
+{
+    return inverse(matrix(m0, m1, m2, m3));
+}
+#define MATRIX(cb, idx) matrix(cb[idx], cb[idx+1], cb[idx+2], cb[idx+3])
+
+void main( 
+  float4 v0 : POSITION0,
+  float3 v1 : NORMAL0,
+  out float4 o0 : SV_POSITION0,
+  out float4 o1 : TEXCOORD0,
+  out float3 o2 : TEXCOORD1,
+  out float fov : TEXCOORD2)
+{
+  float4 r0, r1, r2;
+  float det, separation, convergence, depth;
+  
+
+  r0.xyzw = cb2[1].xyzw * v0.yyyy;
+  r0.xyzw += cb2[0].xyzw * v0.xxxx;
+  r0.xyzw += cb2[2].xyzw * v0.zzzz;
+  r0.xyzw += cb2[3].xyzw;
+  r1.xyzw = cb3[18].xyzw * r0.yyyy;
+  r1.xyzw += cb3[17].xyzw * r0.xxxx;
+  r1.xyzw += cb3[19].xyzw * r0.zzzz;
+  r1.xyzw += cb3[20].xyzw * r0.wwww;
+  o0.xyzw = r1.xyzw;
+  float4 stereo = StereoParams.Load(0);
+  separation = stereo.x;
+  convergence = stereo.y;
+  matrix mp = MATRIX(cb3, 17);
+  matrix MV = MATRIX(cb3, 9);
+  depth = r1.w;
+  r1.x += separation * (depth - convergence);
+  r1.y = cb1[5].x * r1.y;
+  r2.xzw = float3(0.5, 0.5, 0.5) * r1.xwy;
+  o1.zw = r1.zw;
+  o1.xy = r2.xw + r2.zz;
+  r1.xyz = cb3[10].xyz * r0.yyy;
+  r1.xyz += cb3[9].xyz * r0.xxx;
+  r0.xyz = cb3[11].xyz * r0.zzz;
+  r0.xyz += cb3[12].xyz * r0.www;
+  
+  
+  // Calculamos los términos de la matriz adjunta sin el determinante
+float m11_m22_m21_m12 = (MV._m11 * MV._m22) - (MV._m21 * MV._m12);
+float m21_m02_m01_m22 = (MV._m21 * MV._m02) - (MV._m01 * MV._m22);
+float m01_m12_m11_m02 = (MV._m01 * MV._m12) - (MV._m11 * MV._m02);
+float det = determinant(MV);
+float3 mi = float3(m11_m22_m21_m12 * det, m21_m02_m01_m22 * det, m01_m12_m11_m02 * det);
+fov = 1 / dot(mi, mp._m00_m10_m20);
+
+  
+    // Calculamos los términos de la matriz adjunta con el determinante
+  det = determinant(MV);
+  float3 mi = float3(
+    ((MV._m11 * MV._m22) - (MV._m21 * MV._m12)) * det,
+    ((MV._m21 * MV._m02) - (MV._m01 * MV._m22)) * det,
+    ((MV._m01 * MV._m12) - (MV._m11 * MV._m02)) * det
+  );
+  fov = 1 / dot(mi, mp._m00_m10_m20);
+  
+  r0.x += separation * (depth - convergence) * fov;
+  r1.xyz = float3(-1, -1, 1) * r0.xyz;
+  r0.xyz = -r0.xyz * float3(-1, -1, 1) + v1.xyz;
+  o2.xyz = cb0[2].xxx * r0.xyz + r1.xyz;
+}
