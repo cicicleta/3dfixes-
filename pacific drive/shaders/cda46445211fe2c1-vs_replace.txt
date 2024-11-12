@@ -1,0 +1,526 @@
+//AUTO DEPTH POINTER DOT
+// ---- Created with 3Dmigoto v1.3.16 on Sun May 15 09:06:51 2022
+Buffer<float4> t2 : register(t2);
+
+Buffer<float4> t1 : register(t1);
+
+TextureCube<float4> t0 : register(t0);
+
+SamplerState s0_s : register(s0);
+
+cbuffer cb3 : register(b3)
+{
+  float4 cb3[1];
+}
+
+cbuffer cb2 : register(b2)
+{
+  float4 cb2[5];
+}
+
+cbuffer cb1 : register(b1)
+{
+  float4 cb1[211];
+}
+
+cbuffer cb0 : register(b0)
+{
+  float4 cb0[115];
+}
+
+
+
+
+///////////////////////////////////HUDFIX AUTODEPTH///////////////////////////////////
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+// Depth buffer copied to this input with 3Dmigoto:
+Texture2D<float> DepthBuffer : register(t110);
+
+//define 70 matrices copied from CB1 from light shader to CB13
+//used for auto depth crosshair with universal formula for UE4 by DJ_RK
+
+
+static const float near = 0.00001;
+static const float far = 1;
+
+float world_z_from_depth_buffer(float x, float y)
+{
+    uint width, height;
+    float z;
+    float4 r0;
+    DepthBuffer.GetDimensions(width, height);
+
+float4 SwitchGetFrom = IniParams.Load(int2(54,0));
+
+float4 stereo = StereoParams.Load(0);
+float convergence = stereo.y;
+x = min(max((x /2 + 0.5) * width, 0), width - width/2.4);
+y = min(max((-y /2 + 0.35) * height, 0), height - 1);
+
+
+    z = DepthBuffer.Load(int3(x, y, 0)).x;
+    if (z == 1)
+        return 0;
+
+//skip original formula for autodepth calc and replace with DJ_RKs universal Depth calculation formula for UE4 Games.
+//return (far*near/((z)*near) + (far*z));
+//let the shader find the right matrix
+
+
+if(cb1[51].w==-0.00000000999999994)
+{
+  r0.zw = cb1[51].xz * float2(z,z);
+  r0.z = cb1[51].y + r0.z;
+  r0.w = -cb1[51].w + r0.w;
+}
+if(cb1[53].w==-0.00000000999999994)
+{
+  r0.zw = cb1[53].xz * float2(z,z);
+  r0.z = cb1[53].y + r0.z;
+  r0.w = -cb1[53].w + r0.w;
+}
+if(cb1[57].w==-0.00000000999999994)
+{
+  r0.zw = cb1[57].xz * float2(z,z);
+  r0.z = cb1[57].y + r0.z;
+  r0.w = -cb1[57].w + r0.w;
+}
+if(cb1[61].w==-0.00000000999999994)
+{
+  r0.zw = cb1[61].xz * float2(z,z);
+  r0.z = cb1[61].y + r0.z;
+  r0.w = -cb1[61].w + r0.w;
+}
+if(cb1[65].w==-0.00000000999999994)
+{
+  r0.zw = cb1[65].xz * float2(z,z);
+  r0.z = cb1[65].y + r0.z;
+  r0.w = -cb1[65].w + r0.w;
+}
+
+  r0.w = 1 / r0.w;
+  r0.z = r0.z + r0.w; 
+  return r0.z;
+}
+
+float adjust_from_depth_buffer(float x, float y, float numsamples)
+{
+    float4 stereo = StereoParams.Load(0);
+  if (stereo.x==0) {return 0;}
+    float separation = stereo.x; float convergence = stereo.y;
+    float4 CrosshairDepth2 = IniParams.Load(int2(27,0));
+    float old_offset, offset, w, sampled_w, distance;
+    uint i;
+
+    // Stereo cursor: To improve the accuracy of the stereo cursor, we
+    // sample a number of points on the depth buffer, starting at the near
+    // clipping plane and working towards original x + separation.
+    //
+    // You can think of this as a line in three dimensional space that
+    // starts at each eye and stretches out towards infinity. We sample 255
+    // points along this line (evenly spaced in the X axis) and compare
+    // with the depth buffer to find where the line is first intersected.
+    //
+    // Note: The reason for sampling 255 points came from a restriction in
+    // DX9/SM3 where loops had to run a constant number of iterations and
+    // there was no way to set that number from within the shader itself.
+    // I'm not sure if the same restriction applies in DX11 with SM4/5 - if
+    // it doesn't, we could change this to check each pixel instead for
+    // better accuracy.
+    //
+    // Based on DarkStarSword's stereo crosshair code originally developed
+    // for Miasmata, adapted to Unity, then translated to HLSL.
+
+    offset = (near - convergence) * separation; // Z = X offset from center
+    distance = separation - offset;         // Total distance to cover (separation - starting X offset)
+
+    old_offset = offset;
+    for (i = 0; i < numsamples; i++) {
+        offset += distance / numsamples;
+
+        // Calculate depth for this point on the line:
+        w = (separation * convergence) / (separation - offset);
+
+        sampled_w = world_z_from_depth_buffer(x + offset, y);
+        if (sampled_w == 0)
+            return separation;
+
+        // If the sampled depth is closer than the calculated depth,
+        // we have found something that intersects the line, so exit
+        // the loop and return the last point that was not intersected:
+        if (w > sampled_w)
+            break;
+
+        old_offset = offset;
+    }
+
+    return old_offset;
+}
+
+/////////////HUD FIX END declarations ///////////////
+
+
+
+
+void main(
+  float4 v0 : ATTRIBUTE0,
+  uint v1 : SV_VertexID0,
+  out float4 o0 : TEXCOORD10,
+  out float4 o1 : TEXCOORD11,
+  out float4 o2 : TEXCOORD0,
+  out float4 o3 : TEXCOORD7,
+  out float4 o4 : SV_POSITION0)
+{
+// Needs manual fix for instruction:
+// unknown dcl_: dcl_input_sgv v1.x, vertex_id
+  float4 r0,r1,r2,r3,r4,r5;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+  float4 r10;
+float4 stereo = StereoParams.Load(0);
+float4 tex_filter = IniParams.Load(int2(2,0));
+float4 HudDepth = IniParams.Load(int2(20,0));
+float4 CrosshairDepth = IniParams.Load(int2(21,0));
+float4 AutoDepthSwith = IniParams.Load(int2(22,0));
+float4 MenuIndicator = IniParams.Load(int2(23,0));
+float4 AimIndicator = IniParams.Load(int2(78,0));
+float4 InventoryMenuIndicator = IniParams.Load(int2(25,0));
+float4 LeftHUD_X_ScreenDepth = IniParams.Load(int2(13,0));
+float4 RightHUD_X_ScreenDepth = IniParams.Load(int2(14,0));
+float4 UpperHUD_Y_ScreenDepth = IniParams.Load(int2(15,0));
+float4 LowerHUD_Y_ScreenDepth = IniParams.Load(int2(16,0));
+float4 AutoDepthAdjustDepth = IniParams.Load(int2(27,0));
+float4 HUDToggle = IniParams.Load(int2(71,0));
+float4 SubtitleDepthToggle = IniParams.Load(int2(75,0));
+float4 SubtitleDepth = IniParams.Load(int2(74,0));
+float4 CrosshairOnlyDepth = IniParams.Load(int2(79,0));
+
+
+  r0.x = (int)v1.x + asint(cb3[0].w);
+  r0.y = (uint)r0.x << 1;
+  r0.yzw = t2.Load(r0.y).xyz;
+  bitmask.x = ((~(-1 << 31)) << 1) & 0xffffffff;  r1.x = (((uint)r0.x << 1) & bitmask.x) | ((uint)1 & ~bitmask.x);
+  r1.xyzw = t2.Load(r1.x).xyzw;
+  r2.xyz = r1.yzx * r0.yzw;
+  r0.yzw = r1.xyz * r0.zwy + -r2.xyz;
+  r0.yzw = r0.yzw * r1.www;
+  r2.xyz = r0.yzw * r1.yzx;
+  r0.yzw = r0.wyz * r1.zxy + -r2.xyz;
+  r0.yzw = r0.yzw * r1.www;
+  r2.xyz = cb2[4].xxx * cb2[0].xyz;
+  r3.xyz = cb2[4].yyy * cb2[1].xyz;
+  r4.xyz = cb2[4].zzz * cb2[2].xyz;
+  r5.xyz = r3.xyz * r0.zzz;
+  r5.xyz = r0.yyy * r2.xyz + r5.xyz;
+  o0.xyz = r0.www * r4.xyz + r5.xyz;
+  r0.yzw = r3.xyz * r1.yyy;
+  r0.yzw = r1.xxx * r2.xyz + r0.yzw;
+  o1.xyz = r1.zzz * r4.xyz + r0.yzw;
+  o1.w = cb2[4].w * r1.w;
+  r0.yzw = cb2[1].xyz * v0.yyy;
+  r0.yzw = cb2[0].xyz * v0.xxx + r0.yzw;
+  r0.yzw = cb2[2].xyz * v0.zzz + r0.yzw;
+  r1.xyz = cb2[3].xyz + cb1[70].xyz;
+  r0.yzw = r1.xyz + r0.yzw;
+  r0.x = (int)r0.x * asint(cb3[0].y);
+  r1.xy = t1.Load(r0.x).xy;
+  r2.xyzw = cb1[1].xyzw * r0.zzzz;
+  r2.xyzw = r0.yyyy * cb1[0].xyzw + r2.xyzw;
+  r2.xyzw = r0.wwww * cb1[2].xyzw + r2.xyzw;
+  o4.xyzw = cb1[3].xyzw + r2.xyzw;
+  r0.xyz = -cb1[68].xyz + r0.yzw;
+  r1.z = dot(r0.xyz, r0.xyz);
+  r1.z = sqrt(r1.z);
+  r1.w = dot(r0.xyz, cb1[60].xyz);
+  r1.z = r1.z / r1.w;
+  r1.z = cb1[210].z * r1.z;
+  r1.z = max(0, r1.z);
+  r1.w = min(cb1[67].z, cb0[107].z);
+  r2.x = cb1[67].z + -r1.w;
+  r0.w = r2.x + r0.z;
+  r0.z = dot(r0.xyw, r0.xyw);
+  r2.x = rsqrt(r0.z);
+  r0.z = r2.x * r0.z;
+  r1.z = max(cb0[107].w, r1.z);
+  r2.y = cmp(0 < r1.z);
+  r2.z = r1.z * r2.x;
+  r1.w = r2.z * r0.w + r1.w;
+  r2.z = -r2.z * r0.w + r0.w;
+  r1.z = -r1.z * r2.x + 1;
+  r1.z = r1.z * r0.z;
+  r2.w = -cb0[110].y + r1.w;
+  r2.w = cb0[107].y * r2.w;
+  r2.w = max(-127, r2.w);
+  r2.w = exp2(-r2.w);
+  r2.w = cb0[110].x * r2.w;
+  r1.w = -cb0[108].w + r1.w;
+  r1.w = cb0[108].y * r1.w;
+  r1.w = max(-127, r1.w);
+  r1.w = exp2(-r1.w);
+  r1.w = cb0[108].z * r1.w;
+  r2.w = r2.y ? r2.w : cb0[107].x;
+  r1.w = r2.y ? r1.w : cb0[108].x;
+  r1.z = r2.y ? r1.z : r0.z;
+  r2.y = r2.y ? r2.z : r0.w;
+  r2.z = cb0[107].y * r2.y;
+  r2.z = max(-127, r2.z);
+  r3.x = exp2(-r2.z);
+  r3.x = 1 + -r3.x;
+  r3.x = r3.x / r2.z;
+  r3.y = -r2.z * 0.240226507 + 0.693147182;
+  r2.z = cmp(0.00999999978 < abs(r2.z));
+  r2.z = r2.z ? r3.x : r3.y;
+  r2.y = cb0[108].y * r2.y;
+  r2.y = max(-127, r2.y);
+  r3.x = exp2(-r2.y);
+  r3.x = 1 + -r3.x;
+  r3.x = r3.x / r2.y;
+  r3.y = -r2.y * 0.240226507 + 0.693147182;
+  r2.y = cmp(0.00999999978 < abs(r2.y));
+  r2.y = r2.y ? r3.x : r3.y;
+  r1.w = r2.y * r1.w;
+  r1.w = r2.w * r2.z + r1.w;
+  r2.y = r1.w * r1.z;
+  r2.zw = cmp(float2(0,0) < cb0[110].zw);
+  if (r2.z != 0) {
+    r2.z = saturate(r0.z * cb0[114].x + cb0[114].y);
+    r3.xy = float2(1,-1) * cb0[113].yx;
+    r3.x = dot(r0.xy, r3.xy);
+    r3.y = dot(r0.xy, cb0[113].xy);
+    r3.z = r0.w;
+    r4.xyz = t0.SampleLevel(s0_s, r3.xyz, 0).xyz;
+    r3.xyz = t0.SampleLevel(s0_s, r3.xyz, cb0[114].z).xyz;
+    r4.xyz = r4.xyz + -r3.xyz;
+    r3.xyz = r2.zzz * r4.xyz + r3.xyz;
+    r3.xyz = cb0[109].xyz * r3.xyz;
+  } else {
+    r3.xyz = cb0[109].xyz;
+  }
+  r2.z = cmp(cb0[111].w >= 0);
+  r3.w = cmp(cb0[110].z == 0.000000);
+  r2.z = r2.z ? r3.w : 0;
+  if (r2.z != 0) {
+    r0.xyw = r2.xxx * r0.xyw;
+    r0.x = saturate(dot(r0.xyw, cb0[111].xyz));
+    r0.x = log2(r0.x);
+    r0.x = cb0[112].w * r0.x;
+    r0.x = exp2(r0.x);
+    r0.xyw = cb0[112].xyz * r0.xxx;
+    r1.z = -cb0[111].w + r1.z;
+    r1.z = max(0, r1.z);
+    r1.z = r1.w * r1.z;
+    r1.z = exp2(-r1.z);
+    r1.z = min(1, r1.z);
+    r1.z = 1 + -r1.z;
+    r4.xyz = r1.zzz * r0.xyw;
+  } else {
+    r4.xyz = float3(0,0,0);
+  }
+  r0.x = exp2(-r2.y);
+  r0.x = min(1, r0.x);
+  r4.w = max(cb0[109].w, r0.x);
+  r0.x = cmp(cb0[110].w < r0.z);
+  r0.x = r0.x ? r2.w : 0;
+  r0.xyzw = r0.xxxx ? float4(0,0,0,1) : r4.xyzw;
+  r1.z = 1 + -r0.w;
+  o3.xyz = r3.xyz * r1.zzz + r0.xyz;
+  o0.w = 0;
+  o2.xy = r1.xy;
+  o2.zw = float2(0,0);
+  o3.w = r0.w;
+
+if(AimIndicator.x==1.0)
+{
+if(tex_filter.x==3.0)
+{
+o4.x-=stereo.x*(o4.w-stereo.y);
+o4.x+=adjust_from_depth_buffer(0,0,5000)*o4.w*0.97*AutoDepthAdjustDepth.x;
+}
+}
+
+  return;
+}
+
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) D3D Shader Disassembler
+//
+//   using 3Dmigoto v1.3.16 on Sun May 15 09:06:51 2022
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// ATTRIBUTE                0   xyzw        0     NONE   float   xyz
+// SV_VertexID              0   x           1   VERTID    uint   x
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// TEXCOORD                10   xyzw        0     NONE   float   xyzw
+// TEXCOORD                11   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 0   xyzw        2     NONE   float   xyzw
+// TEXCOORD                 7   xyzw        3     NONE   float   xyzw
+// SV_POSITION              0   xyzw        4      POS   float   xyzw
+//
+vs_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer cb0[115], immediateIndexed
+dcl_constantbuffer cb1[211], immediateIndexed
+dcl_constantbuffer cb2[5], immediateIndexed
+dcl_constantbuffer cb3[1], immediateIndexed
+dcl_sampler s0, mode_default
+dcl_resource_texturecube (float,float,float,float) t0
+dcl_resource_buffer (float,float,float,float) t1
+dcl_resource_buffer (float,float,float,float) t2
+dcl_input v0.xyz
+dcl_input_sgv v1.x, vertex_id
+dcl_output o0.xyzw
+dcl_output o1.xyzw
+dcl_output o2.xyzw
+dcl_output o3.xyzw
+dcl_output_siv o4.xyzw, position
+dcl_temps 6
+iadd r0.x, v1.x, cb3[0].w
+ishl r0.y, r0.x, l(1)
+ld_indexable(buffer)(float,float,float,float) r0.yzw, r0.yyyy, t2.wxyz
+bfi r1.x, l(31), l(1), r0.x, l(1)
+ld_indexable(buffer)(float,float,float,float) r1.xyzw, r1.xxxx, t2.xyzw
+mul r2.xyz, r0.yzwy, r1.yzxy
+mad r0.yzw, r1.xxyz, r0.zzwy, -r2.xxyz
+mul r0.yzw, r1.wwww, r0.yyzw
+mul r2.xyz, r1.yzxy, r0.yzwy
+mad r0.yzw, r0.wwyz, r1.zzxy, -r2.xxyz
+mul r0.yzw, r1.wwww, r0.yyzw
+mul r2.xyz, cb2[0].xyzx, cb2[4].xxxx
+mul r3.xyz, cb2[1].xyzx, cb2[4].yyyy
+mul r4.xyz, cb2[2].xyzx, cb2[4].zzzz
+mul r5.xyz, r0.zzzz, r3.xyzx
+mad r5.xyz, r0.yyyy, r2.xyzx, r5.xyzx
+mad o0.xyz, r0.wwww, r4.xyzx, r5.xyzx
+mul r0.yzw, r1.yyyy, r3.xxyz
+mad r0.yzw, r1.xxxx, r2.xxyz, r0.yyzw
+mad o1.xyz, r1.zzzz, r4.xyzx, r0.yzwy
+mul o1.w, r1.w, cb2[4].w
+mul r0.yzw, v0.yyyy, cb2[1].xxyz
+mad r0.yzw, cb2[0].xxyz, v0.xxxx, r0.yyzw
+mad r0.yzw, cb2[2].xxyz, v0.zzzz, r0.yyzw
+add r1.xyz, cb1[70].xyzx, cb2[3].xyzx
+add r0.yzw, r0.yyzw, r1.xxyz
+imul null, r0.x, r0.x, cb3[0].y
+ld_indexable(buffer)(float,float,float,float) r1.xy, r0.xxxx, t1.xyzw
+mul r2.xyzw, r0.zzzz, cb1[1].xyzw
+mad r2.xyzw, r0.yyyy, cb1[0].xyzw, r2.xyzw
+mad r2.xyzw, r0.wwww, cb1[2].xyzw, r2.xyzw
+add o4.xyzw, r2.xyzw, cb1[3].xyzw
+add r0.xyz, r0.yzwy, -cb1[68].xyzx
+dp3 r1.z, r0.xyzx, r0.xyzx
+sqrt r1.z, r1.z
+dp3 r1.w, r0.xyzx, cb1[60].xyzx
+div r1.z, r1.z, r1.w
+mul r1.z, r1.z, cb1[210].z
+max r1.z, r1.z, l(0.000000)
+min r1.w, cb0[107].z, cb1[67].z
+add r2.x, -r1.w, cb1[67].z
+add r0.w, r0.z, r2.x
+dp3 r0.z, r0.xywx, r0.xywx
+rsq r2.x, r0.z
+mul r0.z, r0.z, r2.x
+max r1.z, r1.z, cb0[107].w
+lt r2.y, l(0.000000), r1.z
+mul r2.z, r2.x, r1.z
+mad r1.w, r2.z, r0.w, r1.w
+mad r2.z, -r2.z, r0.w, r0.w
+mad r1.z, -r1.z, r2.x, l(1.000000)
+mul r1.z, r0.z, r1.z
+add r2.w, r1.w, -cb0[110].y
+mul r2.w, r2.w, cb0[107].y
+max r2.w, r2.w, l(-127.000000)
+exp r2.w, -r2.w
+mul r2.w, r2.w, cb0[110].x
+add r1.w, r1.w, -cb0[108].w
+mul r1.w, r1.w, cb0[108].y
+max r1.w, r1.w, l(-127.000000)
+exp r1.w, -r1.w
+mul r1.w, r1.w, cb0[108].z
+movc r2.w, r2.y, r2.w, cb0[107].x
+movc r1.w, r2.y, r1.w, cb0[108].x
+movc r1.z, r2.y, r1.z, r0.z
+movc r2.y, r2.y, r2.z, r0.w
+mul r2.z, r2.y, cb0[107].y
+max r2.z, r2.z, l(-127.000000)
+exp r3.x, -r2.z
+add r3.x, -r3.x, l(1.000000)
+div r3.x, r3.x, r2.z
+mad r3.y, -r2.z, l(0.240226507), l(0.693147182)
+lt r2.z, l(0.010000), |r2.z|
+movc r2.z, r2.z, r3.x, r3.y
+mul r2.y, r2.y, cb0[108].y
+max r2.y, r2.y, l(-127.000000)
+exp r3.x, -r2.y
+add r3.x, -r3.x, l(1.000000)
+div r3.x, r3.x, r2.y
+mad r3.y, -r2.y, l(0.240226507), l(0.693147182)
+lt r2.y, l(0.010000), |r2.y|
+movc r2.y, r2.y, r3.x, r3.y
+mul r1.w, r1.w, r2.y
+mad r1.w, r2.w, r2.z, r1.w
+mul r2.y, r1.z, r1.w
+lt r2.zw, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[110].zzzw
+if_nz r2.z
+  mad_sat r2.z, r0.z, cb0[114].x, cb0[114].y
+  mul r3.xy, cb0[113].yxyy, l(1.000000, -1.000000, 0.000000, 0.000000)
+  dp2 r3.x, r0.xyxx, r3.xyxx
+  dp2 r3.y, r0.xyxx, cb0[113].xyxx
+  mov r3.z, r0.w
+  sample_l_indexable(texturecube)(float,float,float,float) r4.xyz, r3.xyzx, t0.xyzw, s0, l(0.000000)
+  sample_l_indexable(texturecube)(float,float,float,float) r3.xyz, r3.xyzx, t0.xyzw, s0, cb0[114].z
+  add r4.xyz, -r3.xyzx, r4.xyzx
+  mad r3.xyz, r2.zzzz, r4.xyzx, r3.xyzx
+  mul r3.xyz, r3.xyzx, cb0[109].xyzx
+else
+  mov r3.xyz, cb0[109].xyzx
+endif
+ge r2.z, cb0[111].w, l(0.000000)
+eq r3.w, cb0[110].z, l(0.000000)
+and r2.z, r2.z, r3.w
+if_nz r2.z
+  mul r0.xyw, r0.xyxw, r2.xxxx
+  dp3_sat r0.x, r0.xywx, cb0[111].xyzx
+  log r0.x, r0.x
+  mul r0.x, r0.x, cb0[112].w
+  exp r0.x, r0.x
+  mul r0.xyw, r0.xxxx, cb0[112].xyxz
+  add r1.z, r1.z, -cb0[111].w
+  max r1.z, r1.z, l(0.000000)
+  mul r1.z, r1.z, r1.w
+  exp r1.z, -r1.z
+  min r1.z, r1.z, l(1.000000)
+  add r1.z, -r1.z, l(1.000000)
+  mul r4.xyz, r0.xywx, r1.zzzz
+else
+  mov r4.xyz, l(0,0,0,0)
+endif
+exp r0.x, -r2.y
+min r0.x, r0.x, l(1.000000)
+max r4.w, r0.x, cb0[109].w
+lt r0.x, cb0[110].w, r0.z
+and r0.x, r0.x, r2.w
+movc r0.xyzw, r0.xxxx, l(0,0,0,1.000000), r4.xyzw
+add r1.z, -r0.w, l(1.000000)
+mad o3.xyz, r3.xyzx, r1.zzzz, r0.xyzx
+mov o0.w, l(0)
+mov o2.xy, r1.xyxx
+mov o2.zw, l(0,0,0,0)
+mov o3.w, r0.w
+ret
+// Approximately 0 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/

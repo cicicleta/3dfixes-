@@ -1,0 +1,376 @@
+//only static hud depth yet
+// ---- Created with 3Dmigoto v1.3.16 on Mon Dec 20 10:41:58 2021
+cbuffer cb0 : register(b0)
+{
+  float4 cb0[4];
+}
+
+
+
+
+
+
+///////////////////////////////////HUDFIX AUTODEPTH///////////////////////////////////
+// 3Dmigoto declarations
+#define cmp -
+Texture1D<float4> IniParams : register(t120);
+Texture2D<float4> StereoParams : register(t125);
+
+// Depth buffer copied to this input with 3Dmigoto:
+Texture2D<float> DepthBuffer : register(t110);
+
+//define 70 matrices copied from CB1 from light shader to CB13
+//used for auto depth crosshair with universal formula for UE4 by DJ_RK
+cbuffer camera : register(b13)
+{
+    float4 cb1[70];
+}
+
+static const float near = 0.00001;
+static const float far = 1;
+
+float world_z_from_depth_buffer(float x, float y)
+{
+    uint width, height;
+    float z;
+    float4 r0;
+    DepthBuffer.GetDimensions(width, height);
+
+float4 SwitchGetFrom = IniParams.Load(int2(54,0));
+if(SwitchGetFrom.x==1.0)
+{
+float4 stereo = StereoParams.Load(0);
+float convergence = stereo.y;
+x = min(max((x /2 + 0.5) * width, 0), width - width/2.4);
+y = min(max((-y /2 + 0.3) * height, 0), height - width/3.0+convergence);
+}
+
+if(SwitchGetFrom.x==0.0)
+{
+x = min(max((x /2 + 0.5) * width, 0), width - width/2.4);
+y = min(max((-y /2 + 0.5) * height, 0), height - 1);
+}
+    z = DepthBuffer.Load(int3(x, y, 0)).x;
+    if (z == 1)
+        return 0;
+
+//skip original formula for autodepth calc and replace with DJ_RKs universal Depth calculation formula for UE4 Games.
+//return (far*near/((z)*near) + (far*z));
+//let the shader find the right matrix
+
+
+if(cb1[51].w==-0.00000000999999994)
+{
+  r0.zw = cb1[51].xz * float2(z,z);
+  r0.z = cb1[51].y + r0.z;
+  r0.w = -cb1[51].w + r0.w;
+}
+if(cb1[53].w==-0.00000000999999994)
+{
+  r0.zw = cb1[53].xz * float2(z,z);
+  r0.z = cb1[53].y + r0.z;
+  r0.w = -cb1[53].w + r0.w;
+}
+if(cb1[57].w==-0.00000000999999994)
+{
+  r0.zw = cb1[57].xz * float2(z,z);
+  r0.z = cb1[57].y + r0.z;
+  r0.w = -cb1[57].w + r0.w;
+}
+if(cb1[61].w==-0.00000000999999994)
+{
+  r0.zw = cb1[61].xz * float2(z,z);
+  r0.z = cb1[61].y + r0.z;
+  r0.w = -cb1[61].w + r0.w;
+}
+if(cb1[65].w==-0.00000000999999994)
+{
+  r0.zw = cb1[65].xz * float2(z,z);
+  r0.z = cb1[65].y + r0.z;
+  r0.w = -cb1[65].w + r0.w;
+}
+
+  r0.w = 1 / r0.w;
+  r0.z = r0.z + r0.w; 
+  return r0.z;
+}
+
+float adjust_from_depth_buffer(float x, float y, float numsamples)
+{
+    float4 stereo = StereoParams.Load(0);
+  if (stereo.x==0) {return 0;}
+    float separation = stereo.x; float convergence = stereo.y;
+    float4 CrosshairDepth2 = IniParams.Load(int2(27,0));
+    float old_offset, offset, w, sampled_w, distance;
+    uint i;
+
+    // Stereo cursor: To improve the accuracy of the stereo cursor, we
+    // sample a number of points on the depth buffer, starting at the near
+    // clipping plane and working towards original x + separation.
+    //
+    // You can think of this as a line in three dimensional space that
+    // starts at each eye and stretches out towards infinity. We sample 255
+    // points along this line (evenly spaced in the X axis) and compare
+    // with the depth buffer to find where the line is first intersected.
+    //
+    // Note: The reason for sampling 255 points came from a restriction in
+    // DX9/SM3 where loops had to run a constant number of iterations and
+    // there was no way to set that number from within the shader itself.
+    // I'm not sure if the same restriction applies in DX11 with SM4/5 - if
+    // it doesn't, we could change this to check each pixel instead for
+    // better accuracy.
+    //
+    // Based on DarkStarSword's stereo crosshair code originally developed
+    // for Miasmata, adapted to Unity, then translated to HLSL.
+
+    offset = (near - convergence) * separation; // Z = X offset from center
+    distance = separation - offset;         // Total distance to cover (separation - starting X offset)
+
+    old_offset = offset;
+    for (i = 0; i < numsamples; i++) {
+        offset += distance / numsamples;
+
+        // Calculate depth for this point on the line:
+        w = (separation * convergence) / (separation - offset);
+
+        sampled_w = world_z_from_depth_buffer(x + offset, y);
+        if (sampled_w == 0)
+            return separation;
+
+        // If the sampled depth is closer than the calculated depth,
+        // we have found something that intersects the line, so exit
+        // the loop and return the last point that was not intersected:
+        if (w > sampled_w)
+            break;
+
+        old_offset = offset;
+    }
+
+    return old_offset;
+}
+
+/////////////HUD FIX END declarations ///////////////
+
+void main(
+  float2 v0 : ATTRIBUTE0,
+  float2 v1 : ATTRIBUTE1,
+  float4 v2 : ATTRIBUTE2,
+  out float4 o0 : SV_POSITION0,
+  out float4 o1 : COLOR0,
+  out float4 o2 : TEXCOORD1,
+  out float Correction : TEXCOORD2)
+{
+  float4 r0,r10;
+  uint4 bitmask, uiDest;
+  float4 fDest;
+float4 stereo = StereoParams.Load(0);
+float4 tex_filter = IniParams.Load(int2(2,0));
+float4 HudDepth = IniParams.Load(int2(20,0));
+float4 CrosshairDepth = IniParams.Load(int2(21,0));
+float4 AutoDepthSwith = IniParams.Load(int2(22,0));
+float4 MenuIndicator = IniParams.Load(int2(23,0));
+float4 AimIndicator = IniParams.Load(int2(24,0));
+float4 InventoryMenuIndicator = IniParams.Load(int2(25,0));
+float4 LeftHUD_X_ScreenDepth = IniParams.Load(int2(13,0));
+float4 RightHUD_X_ScreenDepth = IniParams.Load(int2(14,0));
+float4 UpperHUD_Y_ScreenDepth = IniParams.Load(int2(15,0));
+float4 LowerHUD_Y_ScreenDepth = IniParams.Load(int2(16,0));
+float4 AutoDepthAdjustDepth = IniParams.Load(int2(27,0));
+float4 HUDToggle = IniParams.Load(int2(71,0));
+float4 SubtitleDepthToggle = IniParams.Load(int2(75,0));
+float4 SubtitleDepth = IniParams.Load(int2(74,0));
+float4 CrosshairOnlyDepth = IniParams.Load(int2(79,0));
+
+  r0.xyzw = cb0[1].xyzw * v0.yyyy;
+  r0.xyzw = v0.xxxx * cb0[0].xyzw + r0.xyzw;
+  o0.xyzw = cb0[3].xyzw + r0.xyzw;
+  o1.xyzw = v2.xyzw;
+  o2.xy = v1.xy;
+  o2.zw = float2(0,0);
+
+if(CrosshairOnlyDepth.x==0.0)
+{
+if(AutoDepthSwith.x==1.0)
+{
+  if(LeftHUD_X_ScreenDepth.x == 1.0)
+  {
+    LeftHUD_X_ScreenDepth.x = LeftHUD_X_ScreenDepth.x*1.1;
+  }
+  if(RightHUD_X_ScreenDepth.x == 1.0)
+  {
+    RightHUD_X_ScreenDepth.x = RightHUD_X_ScreenDepth.x*1.1;
+  }
+  if(UpperHUD_Y_ScreenDepth.x == 1.0)
+  {
+    UpperHUD_Y_ScreenDepth.x = UpperHUD_Y_ScreenDepth.x*1.1;
+  }
+  if(LowerHUD_Y_ScreenDepth.x == 1.0)
+  {
+    LowerHUD_Y_ScreenDepth.x = LowerHUD_Y_ScreenDepth.x*1.1;
+  }
+if(o0.y > -LowerHUD_Y_ScreenDepth.x && o0.y < UpperHUD_Y_ScreenDepth.x && o0.x > -LeftHUD_X_ScreenDepth.x && o0.x < RightHUD_X_ScreenDepth.x)
+{
+  r10.x=adjust_from_depth_buffer(0,0,5000)*o0.w*0.97*AutoDepthAdjustDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else if(o0.y <= -0.4 && o0.x > -0.7 && o0.x < 0.7 && SubtitleDepthToggle.x==1.0)
+{
+  r10.x = stereo.x*0;
+  r10.x = stereo.x*SubtitleDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+}
+if(AutoDepthSwith.x==0.0 && MenuIndicator.x==1.0)
+  {
+    if(CrosshairDepth.x!=1.0)
+    {
+      if(o0.y > -LowerHUD_Y_ScreenDepth.x && o0.y < UpperHUD_Y_ScreenDepth.x && o0.x > -LeftHUD_X_ScreenDepth.x && o0.x < RightHUD_X_ScreenDepth.x)
+      {
+        r10.x = stereo.x*HudDepth.x*CrosshairDepth.x;
+        o0.x+=r10.x;
+        Correction = r10.x;
+      }
+else if(o0.y <= -0.4 && o0.x > -0.7 && o0.x < 0.7 && SubtitleDepthToggle.x==1.0)
+{
+  r10.x = stereo.x*0;
+  r10.x = stereo.x*SubtitleDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+    }
+else if(o0.y <= -0.4 && o0.x > -0.7 && o0.x < 0.7 && SubtitleDepthToggle.x==1.0)
+{
+  r10.x = stereo.x*0;
+  r10.x = stereo.x*SubtitleDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+  }
+if(AutoDepthSwith.x==0.0 && MenuIndicator.x==0.0)
+{
+if(o0.y <= -0.4 && o0.x > -0.7 && o0.x < 0.7 && SubtitleDepthToggle.x==1.0)
+{
+  r10.x = stereo.x*0;
+  r10.x = stereo.x*SubtitleDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+}
+}
+if(HUDToggle.x==2.0)
+{
+if(o0.y > -0.37 && o0.y < 0.37 && o0.x > -0.37 && o0.x < 0.37)
+{
+}
+else
+{
+o0.x=0;
+}
+}
+if(HUDToggle.x==0.0)
+{
+o0.x=0;
+}
+if(AutoDepthSwith.x==1.0 && CrosshairOnlyDepth.x==1.0)
+{
+if(tex_filter.x==2.0)
+{
+if(o0.y > -0.37 && o0.y < 0.37 && o0.x > -0.37 && o0.x < 0.37)
+{
+  r10.x=adjust_from_depth_buffer(0,0,5000)*o0.w*0.97*AutoDepthAdjustDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+else
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+}
+else
+{
+    r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+}
+
+if(AutoDepthSwith.x==0.0 && CrosshairOnlyDepth.x==1.0)
+{
+  r10.x = stereo.x*HudDepth.x;
+  o0.x+=r10.x;
+  Correction = r10.x;
+}
+  return;
+}
+/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+// Generated by Microsoft (R) D3D Shader Disassembler
+//
+//   using 3Dmigoto v1.3.16 on Mon Dec 20 10:41:58 2021
+//
+//
+// Input signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// ATTRIBUTE                0   xy          0     NONE   float   xy
+// ATTRIBUTE                1   xy          1     NONE   float   xy
+// ATTRIBUTE                2   xyzw        2     NONE   float   xyzw
+//
+//
+// Output signature:
+//
+// Name                 Index   Mask Register SysValue  Format   Used
+// -------------------- ----- ------ -------- -------- ------- ------
+// SV_POSITION              0   xyzw        0      POS   float   xyzw
+// COLOR                    0   xyzw        1     NONE   float   xyzw
+// TEXCOORD                 1   xyzw        2     NONE   float   xyzw
+//
+vs_5_0
+dcl_globalFlags refactoringAllowed
+dcl_constantbuffer cb0[4], immediateIndexed
+dcl_input v0.xy
+dcl_input v1.xy
+dcl_input v2.xyzw
+dcl_output_siv o0.xyzw, position
+dcl_output o1.xyzw
+dcl_output o2.xyzw
+dcl_temps 1
+mul r0.xyzw, v0.yyyy, cb0[1].xyzw
+mad r0.xyzw, v0.xxxx, cb0[0].xyzw, r0.xyzw
+add o0.xyzw, r0.xyzw, cb0[3].xyzw
+mov o1.xyzw, v2.xyzw
+mov o2.xy, v1.xyxx
+mov o2.zw, l(0,0,0,0)
+ret
+// Approximately 0 instruction slots used
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
