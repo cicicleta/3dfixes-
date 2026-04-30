@@ -1,0 +1,261 @@
+Guide: 3D Vision fixes by HelixMod & how to add Compatibility Mode to DX11 Games
+
+101
+Nov 2014
+Jan 2026
+Helifax
+11y
+  ================================================================================================
+NVIDIA 3D Vision Fixes
+================================================================================================
+  Before you try to add Compatibility Mode to a DirectX 11 game, MAKE SURE to check HelixMod Blog!!! 
+We already   fixed hundreds of games for 3D Vision (using proper Geometry Stereo 3D)  and Compatibility Mode is not required.
+
+Alternatively you can use 3D Fix Manager that will allow you to install the 3D fix for your game (if it exists).
+
+A quick video about this awesome tool:
+
+
+
+
+
+If your game doesn't have a fix or still want to add Compatibility Mode, see below!
+
+  ================================================================================================
+Compatibility Mode NEW INFORMATION
+================================================================================================
+    3DMigoto Wrapper Library way  It is now possible to tweak and add Compatibility Mode for any DirectX 11 game using the latest version of 3DMigoto.
+This is a bit more advanced, as sometimes you need to configure 3DMigoto to work with the game, otherwise it 
+might crash the game.
+
+You will need   3DMigoto  found here: 3D Migoto Releases
+
+A video quickly showing this:
+
+
+
+THE OLD VARIANT OF THE ARTICLE STILL APPLIES if you want to mod and keep a track of all your game-profiles!
+
+
+  ================================================================================================
+Compatibility Mode OLD INFORMATION
+================================================================================================
+  Hello all.
+
+I was amazed that no one actually knows how CM mode really works. That's why I decided to unlock its Mysteries:)
+Here is what I found and here I explain:
+
+===========================================================================
+How to   Enable  and   TWEAK  3D Compatibility Mode in any DX11   without swapping profiles  :
+===========================================================================
+(and thus loosing other optimizations in the process)
+
+
+
+==============================
+I. Tools Needed:
+==============================
+- nVidia Inspector
+OR
+- Geforce 3D Profile Manager (I personally use this one since is simpler in this case)
+
+
+
+==================================================
+II. Step 1 - How to export current Nvidia Profiles
+==================================================
+
+(Believe it or not Nvidia inspector doesn't export properly the profiles)
+
+1. First go to "C:\ProgramData\NVIDIA Corporation\Drs" Folder.
+
+2. We are interested in these 3 files:
+  nvdrsdb0.bin  - DataBase0 binary file
+  nvdrsdb1.bin  - DataBase0 binary file
+  nvdrssel.bin  - DataBase Selector file between 0 and 1
+
+3. Delete the   nvdrssel.bin  file. (It will get automatically generated on profile import)
+
+4. Start   Geforce 3D Profile Manger  and hit [Export SLI Profiles]. Save the file.
+
+5. Open the file and search for your DX11 Game entry.
+
+6. Once found APPEND or REPLACE in the settings section this entry:  
+
+    Setting ID_0x709adada = 0x07f58257 InternalSettingFlag=V0 
+
+ so it looks like this:
+
+ 
+
+    Profile "Dragon Age: Inquisition"
+    ShowOn GeForce
+    ProfileType Application
+    Executable "dragonageinquisition.exe"
+    Executable "da3.main_win64_final.exe"
+    Setting ID_0x005f5a32 = 0x00000003
+    Setting ID_0x00666665 = 0x00000001
+    Setting ID_0x00a06946 = 0x080116f5
+    Setting ID_0x00f713bc = 0x00000700
+    Setting ID_0x1033cec2 = 0x00000002
+    Setting ID_0x1033dcd3 = 0x00000004
+    Setting ID_0x106d5cff = 0x00000000
+    Setting ID_0x10f9dc81 = 0x00000011
+    Setting ID_0x701eb457 = 0x2241ab21 InternalSettingFlag=V0
+    SettingString ID_0x7049c7ec = "????" InternalSettingFlag=V0
+    SettingString ID_0x704d456e = "?????Ãª????????a??????????????????" InternalSettingFlag=V0
+    SettingString ID_0x7051e5f5 = "??" InternalSettingFlag=V0
+    Setting ID_0x708db8c5 = 0x2384c0df InternalSettingFlag=V0
+    Setting ID_0x709a1ddf = 0x4b1cd968 InternalSettingFlag=V0
+    SettingString ID_0x70b5603f = "????" InternalSettingFlag=V0
+    Setting ID_0x70edb381 = 0x24208b6c InternalSettingFlag=V0
+    Setting ID_0x709adada = 0x07f58257 InternalSettingFlag=V0
+    EndProfile 
+
+ 7. Save the file.
+
+8. In the "C:\ProgramData\NVIDIA Corporation\Drs" folder delete the  
+ nvdrssel.bin  file. (if it got generated).
+
+9. In   Geforce 3D Profile Manger  hit [Import SLI Profiles].
+
+10. Start the game.   3D Compatibility Mode   should now be enabled.
+
+
+===========================================
+II. Step 2 - Explaining what the flag means
+===========================================
+
+ 
+
+    Setting ID_0x709adada = 0x07f58257 InternalSettingFlag=V0 
+
+  
+ Setting ID_0x709adada  - The "magical" 3D Compatibility Flag
+  0x07f58257  - Value of the flag, which   controls how 3D Compatibility Mode WORKS  .
+  InternalSettingFlag=V0  - This lets the driver knows this is a predefined value. If this is missing   3D Compat Mode will not kick in  .
+Ex:  
+
+    Setting ID_0x709adada = 0x07f58257 
+
+ =========================================
+II. Step 3 - Possible Values for the Flag
+=========================================
+
+Like I said above, the value controls how 3D mode works and mainly  
+ what is 3D and what 2D  .
+
+Values that I found interesting:
+ 
+
+    From:
+    Setting ID_0x709adada = 0x37f58240 InternalSettingFlag=V0
+    // Used by Bioshock Infinite
+     
+    Commonly used:
+    Setting ID_0x709adada = 0x37f58257 InternalSettingFlag=V0
+    // Used by most of the games
+     
+    To:
+    Setting ID_0x709adada = 0x37f5825a InternalSettingFlag=V0
+    // My special value. See below the Example. 
+
+ Finding the correct value is GAME dependent. Just try from the lower value and increase and see what you get. When one found stick with that;))
+
+
+
+=========================================================================
+III. Example: Getting the most of the CM mode in Dragon Age: Inquisition
+=========================================================================
+
+Screenshot taken in Discovery Mode so they can be seen better:
+
+1.  
+
+    Setting ID_0x709adada = 0x37f58240 InternalSettingFlag=V0 
+
+ - Flat 2D. Nothing is actually rendered in 3D.
+
+2.  
+
+    Setting ID_0x709adada = 0x37f58547 InternalSettingFlag=V0 
+
+ - Stereo 3D. Everything is rendered in 3D, including Menus + UI. Known for the atrocious jumping/broken/haloing UI.
+
+3.  
+
+    Setting ID_0x709adada = 0x37f5854a InternalSettingFlag=V0 
+
+ - Stereo 3D. Game is rendered in 3D. Menus + UI is rendered in 2D so no more weird/broken/haloing UI.
+
+
+
+=================================================================
+IV. Video explaining everything that was written in this tutorial
+=================================================================
+
+I've also made a video explaining and showing everything mentioned here. If you have problems following this tutorial please watch the video:)
+
+;feature=youtu.be
+
+While this is not as easy as swapping profiles (for 3D along other settings) it provides better customization on how CM actually works!
+
+Hope it helps:)
+
+PS: I would appreciate if this thread will be a "sticky" so is not "lost" somewhere in the bowls of the forum:)
+
+
+
+==============================================================================
+V.HOW-TO EXPORT and IMPORT Nvidia Profiles using "Geforce 3D Profile Manager" 
+==============================================================================
+This video shows how to export/import profiles. It doesn't cover the whole aspect of finding the CM flag as above.
+
+
+ Lo Principal: Dos Métodos
+Método Moderno (Recomendado)
+Usa 3DMigoto (versión reciente) como wrapper library. Es más avanzado pero muy flexible: puedes tweakear cualquier juego DX11 sin tocar perfiles de NVIDIA. A veces requiere configuración para que no crashee el juego.
+Método Antiguo (Lo que explica la mayor parte del documento)
+Edita manualmente los perfiles NVIDIA usando NVIDIA Inspector o Geforce 3D Profile Manager para habilitar Compatibility Mode (CM).
+
+🔧 El Método Antiguo Paso a Paso
+Paso 1: Exportar perfiles NVIDIA
+
+Ve a C:\ProgramData\NVIDIA Corporation\Drs
+Busca tres archivos:
+
+nvdrsdb0.bin y nvdrsdb1.bin (bases de datos)
+nvdrssel.bin (selector entre BD0 y BD1) — ELIMINA ESTE
+
+
+Abre Geforce 3D Profile Manager → click en [Export SLI Profiles] → guarda el archivo
+Abre el archivo exportado y busca tu juego DX11
+
+Paso 2: El "Magic Flag"
+Añade o reemplaza esta línea en la sección Settings de tu juego:
+Setting ID_0x709adada = 0x07f58257 InternalSettingFlag=V0
+Desglose:
+
+ID_0x709adada = la bandera mágica que activa Compatibility Mode
+0x07f58257 = el valor que controla cómo funciona el CM (qué es 3D y qué es 2D)
+InternalSettingFlag=V0 = le dice al driver que es un valor predefinido (¡CRÍTICO! Sin esto no funciona)
+
+Paso 3: Posibles Valores para el Flag
+Diferentes valores dan resultados distintos:
+ValorResultado0x37f58240Plano 2D — nada en 3D0x37f585473D total — todo (menus + UI) en 3D → pero la UI sale deformada/rota0x37f5854a3D + UI 2D — juego en 3D, menus/UI en 2D (sin artefactos)
+Clave: El valor correcto depende del juego. Tienes que probar desde valores bajos e ir subiendo hasta encontrar el que funcione bien.
+Paso 4: Importar de vuelta
+
+Elimina nvdrssel.bin nuevamente
+En Geforce 3D Profile Manager → [Import SLI Profiles]
+Lanza el juego — Compatibility Mode debería estar activado
+
+
+⚠️ Advertencia Importante
+ANTES de hacer esto, revisa el HelixMod Blog. Ya han arreglado cientos de juegos con stereo 3D propio, así que es probable que tu juego ya tenga una solución mejor. También puedes usar 3D Fix Manager para instalar fixes automáticos si existen.
+
+🎯 En Resumen
+Es un método manual para habilitar modo 3D en juegos DX11 que no lo tienen nativamente. Editando un flag en los perfiles NVIDIA, le dices al driver cómo renderizar el contenido en stereo 3D — pero hay que ajustar el valor correcto para cada juego para evitar que la UI salga hecha un desastre.
+¿Hay algún juego específico con el que quieras probar esto?
+
+  
