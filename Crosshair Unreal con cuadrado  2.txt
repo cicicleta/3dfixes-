@@ -1,0 +1,64 @@
+// Nueva función para obtener la media de profundidad en un área
+float get_average_depth_area(float center_x, float center_y, float size)
+{
+    float total_w = 0;
+    int samples = 0;
+    float half_size = size / 2.0;
+
+    // Muestreo de 3x3 dentro del cuadrado de 0.2x0.2
+    // Puedes aumentar a 4x4 o 5x5 si quieres más precisión, pero 3x3 suele bastar.
+    for (float i = -1; i <= 1; i++)
+    {
+        for (float j = -1; j <= 1; j++)
+        {
+            float offsetX = center_x + (i * half_size);
+            float offsetY = center_y + (j * half_size);
+            
+            float val = world_z_from_depth_buffer(offsetX, offsetY);
+            
+            // Ignoramos el cielo (z=1 o sampled_w=0 según tu función) para que no falsee la media
+            if (val > 0) 
+            {
+                total_w += val;
+                samples++;
+            }
+        }
+    }
+
+    // Si todo es cielo, devolvemos 0, si no, la media
+    return (samples > 0) ? (total_w / samples) : 0;
+}
+
+// Modificamos la función de ajuste para usar la media
+float adjust_from_depth_buffer_averaged(float x, float y)
+{
+    float4 stereo = StereoParams.Load(0);
+    if (stereo.x == 0) { return 0; }
+    
+    float separation = stereo.x; 
+    float convergence = stereo.y;
+    float old_offset, offset, w, sampled_w_avg, distance;
+    uint i;
+
+    offset = (near - convergence) * separation;
+    distance = separation - offset;
+    old_offset = offset;
+    
+    for (i = 0; i < 255; i++) {
+        offset += distance / 255.0;
+        w = (separation * convergence * 20) / (separation - offset);
+        
+        // LLAMADA A LA MEDIA: aquí usamos el área de 0.2
+        sampled_w_avg = get_average_depth_area(x + offset, y, 0.2);
+        
+        if (sampled_w_avg == 0)
+            return separation;
+
+        if (w > sampled_w_avg)
+            break;
+
+        old_offset = offset;
+    }
+
+    return old_offset;
+}
