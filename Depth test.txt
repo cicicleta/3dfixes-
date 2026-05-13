@@ -1,0 +1,6 @@
+uint width, height;
+DepthBuffer.GetDimensions(width, height);
+if (width > 0) {
+    float depth = DepthBuffer.Load(int3(width/2, height/2, 0)).x;
+    o2.rgba = float4(depth, depth, depth, 1);
+}	
