@@ -1,0 +1,3 @@
+[ShaderOverride_DecalMonoCopy_3]
+hash=9dddba2d3ea86c15
+ps-t1=mono copy ps-t1
