@@ -621,3 +621,173 @@ run = $active ? 1 : 0;
 - **Log shader hashes:** Keep running log of all shader hashes you fix; patterns often repeat across games/engines.
 - **Depth buffer slot conflicts:** Always verify chosen register slot doesn't conflict with existing game use.
 - **Screen-space vs. world-space:** Be clear which space correction is applied in; mixing causes subtle misalignment.
+
+- ## FOV Extraction: Magnitude Test for Matrix Detection
+
+### Core Rule: Detect Where FOV Lives
+
+**Problem:** Some matrices expose FOV directly (mProjection), others hide it inside (baked projection + view). How do you know which without reverse-engineering every game?
+
+**Solution:** Test the magnitude of any direction vector in the matrix.
+
+### The Test
+
+Extract a row or column (direction vector) from the matrix:
+```
+magnitude = sqrt(x² + y² + z²)
+```
+
+### The Answer
+
+| Magnitude | Matrix Type | FOV Location |
+|-----------|-------------|--------------|
+| **≈ 1.0** (e.g., 0.9999, 1.0001) | **Pure View** (orthonormal, no projection) | ❌ NOT in this matrix → Look elsewhere (Projection matrix, constant buffer, etc.) |
+| **≠ 1.0** (e.g., 1.2, 1.5, 0.8) | **Projection baked in** (mixed scale factors) | ✅ YES → FOV is hidden here, extractable via reverse math |
+
+---
+
+### Why This Works: Graphics Math Fundamentals
+
+**View Matrix (Pure Orthonormal)**
+- Represents camera position + orientation in world space
+- Direction vectors (rows/columns) are **unit vectors** (magnitude exactly 1.0)
+- **No perspective scaling** applied
+
+**Projection Matrix (Applies Frustum)**
+- Scales directions by `1 / tan(FOV/2)` or similar
+- Introduces non-unity magnitudes
+
+**Engine Behavior**
+- **Most engines:** Keep View and Projection separate
+  - View matrix magnitude ≈ 1.0 → FOV is in Projection matrix
+  - Use direct extraction from mProjection
+  
+- **Some engines:** Bake Projection into the "View" slot (VP or MVP)
+  - View matrix magnitude ≠ 1.0 → FOV is baked in
+  - Requires reverse-math to extract
+
+---
+
+### Real Example: DayZ (Enfusion Engine)
+
+**The discovery:**
+
+We had `cb13[4].xyz = camright` (a direction from the View matrix):
+
+```
+cb13[4].xyz = [-0.871384561, 0, -0.490600467]
+
+magnitude = sqrt(0.871384561² + 0² + 0.490600467²)
+         = sqrt(0.7591 + 0 + 0.2407)
+         = sqrt(0.9998)
+         ≈ 1.0  ← Pure orthonormal
+```
+
+**Conclusion:** camright is a pure direction vector, **NOT a projected one**.
+
+**Where is FOV then?**
+- Check `cb13[0].x = 1.01110184`
+- This equals `tan(FOV_h/2)`
+- **FOV is in the Projection matrix, not the View matrix.**
+
+**How to use this:**
+```hlsl
+// FOV extraction in DayZ:
+float tan_half_fov = cb13[0].x;  // Direct from mProjection[0][0]
+
+// NOT from camright:
+float bad_mag = length(cb13[4].xyz);  // ≈ 1.0, tells us it's pure View
+// Don't try to extract FOV from a magnitude-1 vector — it's not there.
+```
+
+---
+
+### Testing Checklist
+
+Before extracting FOV from any matrix:
+
+- [ ] Extract a direction vector (row or column)
+- [ ] Compute magnitude: `sqrt(x² + y² + z²)`
+- [ ] **If magnitude ≈ 1.0:** FOV is NOT in this matrix
+  - Check mProjection matrix instead
+  - Or look for a FOV constant in another buffer
+- [ ] **If magnitude ≠ 1.0:** FOV might be baked in
+  - Reverse-engineer the scaling to extract angle
+  - Or check if it's just a different normalization scheme
+
+---
+
+### Practical Epsilon
+
+Use **floating-point tolerance** when comparing magnitude to 1.0:
+
+```hlsl
+float mag = length(view_row_xyz);
+float epsilon = 0.01;
+bool is_pure_view = abs(mag - 1.0) < epsilon;
+
+if (is_pure_view) {
+    // FOV is elsewhere, don't hunt for it here
+} else {
+    // FOV might be hidden in the scaling — investigate further
+}
+```
+
+---
+
+### Other FOV Extraction Methods (for comparison)
+
+#### Method 1: Direct Projection Matrix (Most Common)
+```hlsl
+tan(FOV_h/2) = mProjection[0][0]  // DayZ approach
+```
+✅ Works when Projection matrix is separate and accessible.
+
+#### Method 2: From Baked Projection (Using Magnitude Test)
+```hlsl
+float mag = length(matrix_row.xyz);
+// If mag ≠ 1.0, reverse math to extract FOV
+// Requires understanding how projection was baked in
+```
+✅ Works when projection is mixed into View (detected via magnitude test).
+
+#### Method 3: Unity Cross-Game (When Both Matrices Available)
+```hlsl
+// More robust — works across all Unity games
+float fov_factor = dot(unity_matrixV.row1, InvViewProj.col0);
+```
+✅ Works in any Unity engine (no game-specific reverse-engineering).
+
+---
+
+### Documentation: Game Signatures
+
+**Keep a table of magnitudes for each game/engine:**
+
+| Game | Matrix | Vector | Magnitude | FOV Location | Notes |
+|------|--------|--------|-----------|--------------|-------|
+| DayZ (Enfusion) | mView | camright (row 0) | ≈ 1.0 | mProjection[0][0] | Pure View, FOV is tan(FOV_h/2) |
+| Death's Door (Unity) | View | ice_reflect | ≈ 1.0 | Separate inverse matrix | Pure orthonormal |
+| (Your game here) | ? | ? | ? | ? | ? |
+
+This helps when you encounter a similar engine later.
+
+---
+
+### Why This Matters for Stereo 3D
+
+In stereo fixes, you need to:
+1. **Extract FOV** to scale parallax correctly (convergence-invariant)
+2. **Extract camright** to apply stereo offset
+3. **Know the difference** between pure View (magnitude ≈ 1.0) and projection-mixed (magnitude ≠ 1.0)
+
+The magnitude test is your **detection mechanism** — it tells you whether your FOV extraction will work or fail before you waste time debugging.
+
+---
+
+### Credits & Discovery
+
+**DayZ (Enfusion) Analysis - July 2, 2026**
+- Contributor: Cicicleta (stereo-3d-shader-hacking community)
+- Context: Shadow cascade stereo fix, magnitude test for FOV location
+- Confirmed values: cb13[4].xyz magnitude ≈ 1.0 (pure View), cb13[0].x = tan(FOV_h/2)
