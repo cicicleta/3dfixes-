@@ -791,3 +791,40 @@ The magnitude test is your **detection mechanism** — it tells you whether your
 - Contributor: Cicicleta (stereo-3d-shader-hacking community)
 - Context: Shadow cascade stereo fix, magnitude test for FOV location
 - Confirmed values: cb13[4].xyz magnitude ≈ 1.0 (pure View), cb13[0].x = tan(FOV_h/2)
+
+- ## Unity — Screen-space shadow raymarch (view-space reconstruction, fix on step vector)
+
+**Contexto:** shader de sombra SS con raymarch, reconstrucción de posición vía inverse-Projection (no inverse-ViewProjection). Confirmado en juego Unity, PS hash `2a475ae17a13c1df`.
+
+**Cómo se identificó el espacio:**
+- `cb2[10-13]` es la inversa exacta de `cb2[6-9]` (verificado numéricamente: `cb2[10].x = 1/cb2[6].x`, `cb2[11].y = 1/cb2[7].y`) → `cb2[6-9]` es matriz de **Proyección pura** (diagonal, sin rotación/traslación), no ViewProjection.
+- Por tanto, tras `r1.xyz = r1.xyz / r1.www` usando `cb2[10-13]`, el resultado es **posición en VIEW SPACE**, no world space.
+- Confirmación adicional: `r1.z`/`r3.z` se usan directamente como profundidad de cámara en la comparación de oclusión del loop (`r2.w = -r3.z + -r2.w; r2.w = r1.z * cb0[12].z + r2.w;`), lo cual solo tiene sentido dimensional en view-space.
+- `cb2[18-21]` (aplicado después del punto de fix) es la matriz view→world, usada para pasar a world-space justo después de reconstruir en view-space — mismo patrón confirmado en shader hermano de sombra normal (AO/Shadows) del mismo juego, donde el fix se aplica también antes de esa misma transformación `cb2[18-21]`.
+
+**Errores de diagnóstico descartados (documentados para no repetirlos):**
+- Extraer un `camright` (world-space, vía columna de matriz view en `cb13`) y aplicarlo sobre `r1.xyz` es INCORRECTO en este patrón — contamina la componente Z (que aquí es profundidad de cámara, no una coordenada libre de mundo), rompiendo el raymarch de forma que empeora al rotar la cámara (la contaminación depende de la orientación porque `camright` rota con la cámara).
+- Corregir solo el punto de origen (`r1.xyz`) sin corregir el vector de paso del raymarch produce una sombra con la base desplazada pero el contorno deformado — el origen y la dirección de marcha quedan desincronizados.
+- Un "número mágico" fijo calibrado a un solo FOV (ej. `0.025`) parece funcionar en ese punto pero se rompe en otros FOV — señal de que falta el término real de escala de proyección (`cb2[10].x`) en la fórmula, no que falte ajustar la constante.
+- Confirmar la fórmula con solo 2-3 puntos de calibración manual no es fiable para deducir si la relación con `cb2[10].x` es lineal, cuadrática o potencial — si hace falta un multiplicador extra, calibrar 5-6 puntos de FOV y usar regresión (trendline Excel), no ajustar a ojo.
+
+**Fórmula confirmada (convergencia=0), fix sobre el vector de PASO del raymarch, no sobre el origen:**
+
+```hlsl
+r2.xyz = float3(1,1,-1) * cb0[8].xyz;   // dirección al sol
+r0.w = cb0[11].w / cb0[11].y;            // longitud de un paso completo
+r3.xyz = r2.xyz * r0.www;
+r2.xyz = r2.xyz / cb0[11].yyy;           // vector de paso fraccionado
+
+r2.x -= s.x * r2.z * cb2[10].x;          // FIX — sin magic number, cb2[10].x = 1/tan(FOVh/2)
+
+r2.xyz = r2.xyz * -r1.zzz;
+r2.xyz = r2.xyz * cb0[11].www + -r3.xyz;
+r2.xyz = cb0[12].xxx * r2.xyz + r3.xyz;
+```
+
+**Por qué el fix va en el vector de paso y no en el origen:** en view-space, el eje "right" es trivialmente `+X` (no requiere `camright`). El desplazamiento estéreo correcto no es solo "dónde arranca el rayo" sino "en qué dirección avanza" — al inclinar el propio vector de paso (`r2.x`), cada iteración del loop hereda el desplazamiento de forma acumulativa y consistente a lo largo de todo el trazado, en vez de dejar el origen desplazado pero la trayectoria posterior sin corregir.
+
+**Por qué `cb2[10].x` y no una constante:** `r2.z` es la componente de profundidad del vector de paso — la paralaje es proporcional a la profundidad. `cb2[10].x` (`1/tan(FOVh/2)`, tomado directo de la matriz de proyección) escala ese desplazamiento a la unidad correcta de clip-space, haciendo el fix automáticamente adaptativo a cualquier FOV sin calibración manual.
+
+**Validación cruzada:** el mismo patrón base (`FixReg.x -= s.x * FixReg.z * CBMUL_proyección`) aparece en el regex `ShaderRegexPS_AO_Shadows_1` de Losti para AO/Shadows en Unity — confirma que es un patrón establecido para reconstrucciones view-space con esta estructura, no una fórmula ad-hoc de este shader concreto.
