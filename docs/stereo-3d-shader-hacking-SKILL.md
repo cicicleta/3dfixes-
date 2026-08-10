@@ -595,6 +595,56 @@ run = $active ? 1 : 0;
 - Calibration factor `1.02999938` determined empirically for game unit scale
 - Verified across full convergence range (-10cm to +10cm)
 
+### My Winter Car (Unity, geo-11 Direct Mode) — UI Crash on Small Icons (Betting / Flyers)
+
+**Symptom:** Hard crash (process terminates) when the game displays certain small UI icons
+(e.g. the "X" icon in the betting minigame and in flyer-filling). Only occurs with geo-11
+Direct Mode active; disabling 3DMigoto entirely avoids the crash.
+
+**Log signature:** `3DMigoto Crash Handler Invoked`, `ExceptionCode: 0xc0000005` (access
+violation), triggered immediately after:
+```
+HackerDeviceDirectMode::CreateVertexShader called with BytecodeLength = 2744
+FNV hash = a07bbed82a2a115a   (and variant: 7e8031d7a1421ca3)
+```
+
+**Root cause:** These are Unity Fixed-Function pipeline vertex shaders (`UnityFFVertex`
+cbuffer, 52 registers — lights, fog, materials, matrices all packed into one legacy FF
+layout). Unity instantiates a new shader variant — and therefore a new hash — every time
+one of these small UI elements is drawn, which makes a hash-based `[ShaderOverride]` fix
+impractical (whack-a-mole with hashes). geo-11 v0.6.164's assembler/shader-creation path
+crashes on these small FF vertex shaders (BytecodeLength=2744) inside Direct Mode; the
+issue is worsened by MSAA (same underlying MSAA + Direct Mode incompatibility as the
+`CreateSwapChain` `E_INVALIDARG` crash documented elsewhere for this game). The "Shitty"
+AA=0 quality preset avoids the crash but is not required once the fix below is applied.
+
+**Confirmed fix — intercept by texture attributes, not by hash:**
+```ini
+[TextureOverride_X_Fix_Crash]
+match_type = Texture2D
+match_priority = 1
+match_format = R8G8B8A8_UNORM
+match_width = < 15
+StereoMode = 2
+```
+Forces mono on any small (<15px wide) RGBA texture before it reaches the Direct Mode
+code path that crashes, automatically covering every hash variant at once — no need to
+chase individual shader hashes.
+
+**Approaches that did NOT work:**
+- `[ShaderOverride] handling = skip` by hash — doesn't prevent the crash, since it
+  happens during Direct Mode's internal shader analysis (matrix buffer copy etc.), not
+  only at shader substitution time.
+- Editing/simplifying the replacement ASM — the crash is in geo-11's assembler itself,
+  not in the shader's logic; a functionally-equivalent rewritten ASM crashed identically.
+- `StereoFlagsDX10 = 0x00001008` (force both-eyes rendering, bypass RT heuristic) via
+  NVIDIA Profile Inspector / `[Nvidia3DVisionSettings]` — no effect on this crash.
+
+**Related:** the same `TextureOverride` + `StereoMode=2` pattern also fixed a separate
+rearview-mirror crash in this game, but there via a direct hash match
+(`hash = 06db2ece`) since the mirror is a single fixed render target rather than many
+UI hash variants.
+
 ---
 
 ## Quick Lookup Table
